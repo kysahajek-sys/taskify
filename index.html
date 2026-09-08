@@ -307,22 +307,24 @@ function seed(){
     {id:"c2", name:"Done",        color:PALETTE[2]},
     {id:"c3", name:"Accepted",    color:PALETTE[0]},
   ];
-  const today = new Date(); const d = n => new Date(today.getTime()+n*864e5).toISOString().slice(0,10);
+  const task = (title, project, subs) => ({
+    id:uid(), colId:"c1", title, project, deadline:"", notes:"", links:[],
+    subtasks: subs.map(([text,done])=>({id:uid(), text, done}))
+  });
+  const TE = "Tanks Engineering";
   return {
     columns: cols,
-    projects: {"Battery":PALETTE[3], "Tanks Engineering":PALETTE[1], "General":PALETTE[0]},
+    projects: {"Tanks Engineering":PALETTE[1], "General":PALETTE[0]},
     tasks: [
-      {id:uid(), colId:"c1", title:"8s24p Battery Integration WI – close open points", project:"Battery",
-       deadline:d(4), notes:"Review comments from issue 02 to be incorporated.",
-       links:[{label:"STL-INT-WI-0295", url:"https://example.com"}],
-       subtasks:[{id:uid(),text:"Add callouts to Figure 2",done:true},{id:uid(),text:"Replace overexposed Figure 14",done:false},{id:uid(),text:"Add torque stripe close-up",done:false}]},
-      {id:uid(), colId:"c1", title:"Naming Convention handbook – collect approvals", project:"General",
-       deadline:d(-2), notes:"", links:[],
-       subtasks:[{id:uid(),text:"Send to reviewers",done:true},{id:uid(),text:"Fill approval table",done:false}]},
-      {id:uid(), colId:"c2", title:"Bus bar subassembly photos uploaded", project:"Battery",
-       deadline:"", notes:"", links:[], subtasks:[]},
-      {id:uid(), colId:"c3", title:"Torque guide values verified", project:"Tanks Engineering",
-       deadline:d(-20), notes:"", links:[], subtasks:[]},
+      task('Tubes Manufacturing Handbook', "General", [["Upload",true],["Add photos",false]]),
+      task('14.5" Hoop Drawing', TE, [["Discuss on reg. meating",false],["Update",false]]),
+      task('14.5" Bellyband drawing', TE, [["Discuss on reg. meating",false],["Update",false]]),
+      task('14.5" Skirt drawing', TE, [["Discuss on reg. meating",false],["Update",false]]),
+      task('14.5" Update Hoop thickness to 0.063"', TE, [["Write down actual Mass and Volume",false],["Update Hoop thickness",false],["Compare Mass and Volume",false]]),
+      task('14.5" Dome Drawing', TE, [["Incrporate JNE points",true],["Send to MLE",false]]),
+      task('14.5" No pass though Puck drowings', TE, [["Send to review",true]]),
+      task('14.5" Weld samples', TE, [["Create Design",false],["Create drawings",false]]),
+      task('14.5" Double pass through Puck', TE, [["Update geometric tolerances",false]]),
     ]
   };
 }
