@@ -120,10 +120,12 @@
 
   /* ---------- card ---------- */
   .card{
-    background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--c);
+    background:color-mix(in srgb,var(--c) 9%,var(--surface-2));
+    border:1px solid color-mix(in srgb,var(--c) 28%,var(--line));
+    border-left:3px solid var(--c);
     border-radius:var(--radius);padding:9px 10px;cursor:grab;
   }
-  .card:hover{border-color:var(--hover-line);border-left-color:var(--c)}
+  .card:hover{border-color:color-mix(in srgb,var(--c) 55%,var(--line));border-left-color:var(--c)}
   .card.dragging{opacity:.45;cursor:grabbing}
   .card.selected{border-color:var(--accent);border-left-color:var(--accent)}
   .card-title{font-weight:600;margin-bottom:6px;overflow-wrap:anywhere}
@@ -410,7 +412,8 @@ function renderBoard(){
   refreshFilter();
 }
 
-function cardEl(t, color){
+function cardEl(t, fallback){
+  const color = t.project ? projectColor(t.project) : fallback;
   const el = document.createElement("article");
   el.className = "card" + (t.id===openId ? " selected" : "");
   el.draggable = true; el.dataset.id = t.id; el.tabIndex = 0;
