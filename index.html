@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0e1014">
+<meta name="description" content="Taskify — a keyboard-friendly task board with GitHub Gist sync.">
+<title>Taskify</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23161922'/%3E%3Crect x='11' y='13' width='11' height='38' rx='3' fill='%233f9c5a'/%3E%3Crect x='26' y='13' width='11' height='27' rx='3' fill='%232f8f9d'/%3E%3Crect x='41' y='13' width='11' height='18' rx='3' fill='%234a7fd4'/%3E%3Cpath d='M19 40l8 8 18-20' fill='none' stroke='%23161922' stroke-width='11' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M19 40l8 8 18-20' fill='none' stroke='%23e8b64c' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+  :root{
+    --bg:#0e1014;
+    --surface:#161922;
+    --surface-2:#1d212c;
+    --line:#2a2f3d;
+    --text:#e4e7ee;
+    --muted:#8a93a5;
+    --accent:#e8b64c;
+    --danger:#d9534f;
+    --warn:#e0a458;
+    --ok:#4fae6a;
+    --radius:8px;
+    --mono:"JetBrains Mono","Cascadia Code",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font-family:var(--mono);font-size:13px;line-height:1.45;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{background:none;border:none;cursor:pointer}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface);
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;letter-spacing:.02em}
+  .brand span{color:var(--accent)}
+  .spacer{flex:1}
+  .field{
+    display:flex;align-items:center;gap:6px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:var(--radius);padding:5px 9px;
+  }
+  .field input,.field select{background:none;border:none;outline:none;min-width:0}
+  .field input{width:190px}
+  .field select{cursor:pointer}
+  .field select option{background:var(--surface-2)}
+  .btn{
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:6px 11px;background:var(--surface-2);white-space:nowrap;
+  }
+  .btn:hover{border-color:#3d465c;background:#242938}
+  .btn-primary{border-color:#4a5570}
+  .count{color:var(--muted);font-size:12px}
+
+  /* ---------- board ---------- */
+  .board{
+    flex:1;display:flex;gap:14px;align-items:flex-start;
+    padding:14px;overflow-x:auto;overflow-y:hidden;
+  }
+  .col{
+    flex:0 0 288px;max-height:100%;display:flex;flex-direction:column;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  }
+  .col-head{
+    display:flex;align-items:center;gap:8px;padding:9px 10px;
+    border-bottom:1px solid var(--line);border-left:4px solid var(--c);
+    border-radius:10px 10px 0 0;background:color-mix(in srgb,var(--c) 16%,transparent);
+  }
+  .col-title{
+    flex:1;min-width:0;background:none;border:none;outline:none;
+    font-weight:700;color:var(--c);padding:2px 3px;border-radius:4px;
+  }
+  .col-title:focus{background:rgba(255,255,255,.06);color:var(--text)}
+  .icon{
+    width:24px;height:24px;display:grid;place-items:center;border-radius:5px;
+    color:var(--muted);font-size:14px;line-height:1;
+  }
+  .icon:hover{background:rgba(255,255,255,.08);color:var(--text)}
+  .swatch{width:13px;height:13px;border-radius:50%;background:var(--c);border:1px solid rgba(255,255,255,.25)}
+  .col-body{
+    flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:9px;min-height:70px;
+  }
+  .col-body.dragover{background:rgba(255,255,255,.03)}
+  .col-foot{padding:0 10px 10px}
+  .add-item{
+    width:100%;text-align:left;color:var(--muted);padding:7px 8px;
+    border:1px dashed var(--line);border-radius:var(--radius);
+  }
+  .add-item:hover{color:var(--text);border-color:#4a5570}
+
+  /* ---------- card ---------- */
+  .card{
+    background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--c);
+    border-radius:var(--radius);padding:9px 10px;cursor:grab;
+  }
+  .card:hover{border-color:#3d465c;border-left-color:var(--c)}
+  .card.dragging{opacity:.45;cursor:grabbing}
+  .card.selected{border-color:var(--accent);border-left-color:var(--accent)}
+  .card-title{font-weight:600;margin-bottom:6px;overflow-wrap:anywhere}
+  .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .tag{
+    font-size:11px;padding:2px 7px;border-radius:20px;
+    background:color-mix(in srgb,var(--p) 22%,transparent);
+    border:1px solid color-mix(in srgb,var(--p) 55%,transparent);
+    color:color-mix(in srgb,var(--p) 75%,white);
+  }
+  .due{font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+  .due.soon{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
+  .due.over{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 55%,transparent);background:rgba(217,83,79,.12)}
+  .prog{font-size:11px;color:var(--muted)}
+  .prog.done{color:var(--ok)}
+  .card-subs{margin-top:8px;padding-top:7px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+  .card-subs .lbl{font-size:11px;color:var(--muted)}
+  .card-sub{display:flex;align-items:flex-start;gap:7px;font-size:12px;overflow-wrap:anywhere}
+  .card-sub input{width:13px;height:13px;margin:2px 0 0;accent-color:var(--ok);cursor:pointer;flex:0 0 auto}
+  .card-sub.done span{text-decoration:line-through;color:var(--muted)}
+
+  /* ---------- side panel ---------- */
+  .panel{
+    position:fixed;top:0;right:0;height:100%;width:370px;max-width:100%;
+    background:var(--surface);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;transform:translateX(102%);
+    transition:transform .18s ease;z-index:20;
+  }
+  .panel.open{transform:none}
+  @media (prefers-reduced-motion:reduce){.panel{transition:none}}
+  .panel-head{
+    display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);
+  }
+  .panel-head h2{margin:0;font-size:13px;color:var(--muted);font-weight:600;flex:1}
+  .panel-body{flex:1;overflow-y:auto;padding:14px 12px 40px;display:flex;flex-direction:column;gap:14px}
+  .panel-title{
+    width:100%;background:none;border:none;outline:none;resize:none;
+    font-size:16px;font-weight:700;line-height:1.35;overflow:hidden;
+  }
+  .row label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
+  .row input,.row select,.row textarea{
+    width:100%;background:var(--surface-2);border:1px solid var(--line);
+    border-radius:6px;padding:6px 8px;outline:none;
+  }
+  .row input:focus,.row select:focus,.row textarea:focus{border-color:#4a5570}
+  .row textarea{resize:vertical;min-height:64px}
+  .list{display:flex;flex-direction:column;gap:6px}
+  .sub{display:flex;align-items:flex-start;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+  .sub input[type=checkbox]{width:15px;height:15px;margin:3px 0 0;accent-color:var(--ok);cursor:pointer;flex:0 0 auto}
+  .sub input[type=text]{flex:1;width:auto;background:none;border:none;outline:none;padding:0;min-width:0}
+  .sub.done input[type=text]{text-decoration:line-through;color:var(--muted)}
+  .link-row{display:flex;gap:6px;align-items:center}
+  .link-row input{flex:1;width:auto;min-width:0}
+  .link-row a{color:var(--accent);text-decoration:none;padding:0 4px}
+  .inline-add{display:flex;gap:6px}
+  .inline-add input{flex:1;width:auto;min-width:0}
+  .danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
+  .empty{color:var(--muted);font-size:12px;padding:8px 2px}
+  .toast{
+    position:fixed;left:14px;bottom:14px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;
+    opacity:0;transform:translateY(6px);transition:.15s;pointer-events:none;z-index:40;
+  }
+  .toast.show{opacity:1;transform:none}
+
+  /* ---------- gist sync ---------- */
+  .dot{
+    width:8px;height:8px;border-radius:50%;background:var(--muted);
+    display:inline-block;margin-right:7px;vertical-align:middle;
+  }
+  .dot.ok{background:var(--ok)}
+  .dot.dirty{background:var(--warn)}
+  .dot.err{background:var(--danger)}
+  .dot.busy{background:var(--accent);animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  @media (prefers-reduced-motion:reduce){.dot.busy{animation:none}}
+  .backdrop{
+    position:fixed;inset:0;background:rgba(6,8,12,.7);z-index:30;
+    display:none;align-items:center;justify-content:center;padding:16px;
+  }
+  .backdrop.open{display:flex}
+  .dialog{
+    width:440px;max-width:100%;max-height:90vh;overflow-y:auto;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:16px;display:flex;flex-direction:column;gap:13px;
+  }
+  .dialog h2{margin:0;font-size:14px}
+  .dialog p{margin:0;color:var(--muted);font-size:12px}
+  .dialog a{color:var(--accent)}
+  .dialog .row input[type=password],.dialog .row input[type=text]{font-family:var(--mono)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+  .check input{width:15px;height:15px;accent-color:var(--ok);cursor:pointer}
+  .status{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+  .status.err{color:var(--danger)}
+  .status.ok{color:var(--ok)}
+  @media (max-width:640px){
+    .field input{width:120px}
+    .col{flex-basis:82vw}
+  }
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 64 64" width="22" height="22" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill="#1d212c"/>
+      <rect x="11" y="13" width="11" height="38" rx="3" fill="#3f9c5a"/>
+      <rect x="26" y="13" width="11" height="27" rx="3" fill="#2f8f9d"/>
+      <rect x="41" y="13" width="11" height="18" rx="3" fill="#4a7fd4"/>
+      <path d="M19 40l8 8 18-20" fill="none" stroke="#1d212c" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 40l8 8 18-20" fill="none" stroke="#e8b64c" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>Taskify</span>
+  </div>
+  <div class="field">🔍 <input id="search" type="search" placeholder="Search tasks" aria-label="Search tasks"></div>
+  <div class="field"><select id="filter" aria-label="Filter by project"><option value="">All projects</option></select></div>
+  <div class="spacer"></div>
+  <span class="count" id="stats"></span>
+  <button class="btn" id="addCol">+ Column</button>
+  <button class="btn" id="export">Export</button>
+  <button class="btn" id="importBtn">Import</button>
+  <button class="btn" id="syncBtn"><span class="dot" id="syncDot"></span><span id="syncLabel">Gist sync</span></button>
+  <input type="file" id="importFile" accept="application/json,.json" hidden>
+</header>
+
+<main class="board" id="board"></main>
+
+<aside class="panel" id="panel" aria-label="Task details" aria-hidden="true">
+  <div class="panel-head">
+    <h2>Item</h2>
+    <button class="btn danger" id="deleteTask">Delete</button>
+    <button class="icon" id="closePanel" aria-label="Close panel">✕</button>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
+<div class="toast" id="toast" role="status"></div>
+
+<div class="backdrop" id="syncModal" role="dialog" aria-modal="true" aria-label="GitHub Gist sync">
+  <div class="dialog">
+    <h2>GitHub Gist sync</h2>
+    <p>Taskify keeps your board in a single secret gist, so you can open it on any machine. Create a token with only the <strong>gist</strong> scope at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">github.com/settings/tokens</a>.</p>
+    <div class="row">
+      <label for="gh-token">Personal access token</label>
+      <input id="gh-token" type="password" placeholder="ghp_… or github_pat_…" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <label for="gh-gist">Gist ID</label>
+      <input id="gh-gist" type="text" placeholder="Leave empty and create a new one" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="actions">
+      <button class="btn" id="gistCreate">Create new gist</button>
+      <button class="btn btn-primary" id="gistPush">Save to gist</button>
+      <button class="btn" id="gistPull">Load from gist</button>
+    </div>
+    <label class="check"><input type="checkbox" id="gistAuto"> Save automatically after changes</label>
+    <p class="status" id="syncStatus">Not connected yet.</p>
+    <p>The token is stored in this browser only and sent straight to api.github.com. On a shared computer, use “Forget token” when you finish.</p>
+    <div class="actions">
+      <button class="btn danger" id="gistForget">Forget token</button>
+      <div class="spacer"></div>
+      <button class="btn" id="syncClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PALETTE = ["#4a7fd4","#3f9c5a","#2f8f9d","#c0504d","#9b6bcc","#d08b3a","#c25e8e","#6c8f3f"];
+const uid = () => Math.random().toString(36).slice(2,9);
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let state = seed();
+let openId = null;
+
+function seed(){
+  const cols = [
+    {id:"c1", name:"In Progress", color:PALETTE[1]},
+    {id:"c2", name:"Done",        color:PALETTE[2]},
+    {id:"c3", name:"Accepted",    color:PALETTE[0]},
+  ];
+  const today = new Date(); const d = n => new Date(today.getTime()+n*864e5).toISOString().slice(0,10);
+  return {
+    columns: cols,
+    projects: {"Battery":PALETTE[3], "Tanks Engineering":PALETTE[1], "General":PALETTE[0]},
+    tasks: [
+      {id:uid(), colId:"c1", title:"8s24p Battery Integration WI – close open points", project:"Battery",
+       deadline:d(4), notes:"Review comments from issue 02 to be incorporated.",
+       links:[{label:"STL-INT-WI-0295", url:"https://example.com"}],
+       subtasks:[{id:uid(),text:"Add callouts to Figure 2",done:true},{id:uid(),text:"Replace overexposed Figure 14",done:false},{id:uid(),text:"Add torque stripe close-up",done:false}]},
+      {id:uid(), colId:"c1", title:"Naming Convention handbook – collect approvals", project:"General",
+       deadline:d(-2), notes:"", links:[],
+       subtasks:[{id:uid(),text:"Send to reviewers",done:true},{id:uid(),text:"Fill approval table",done:false}]},
+      {id:uid(), colId:"c2", title:"Bus bar subassembly photos uploaded", project:"Battery",
+       deadline:"", notes:"", links:[], subtasks:[]},
+      {id:uid(), colId:"c3", title:"Torque guide values verified", project:"Tanks Engineering",
+       deadline:d(-20), notes:"", links:[], subtasks:[]},
+    ]
+  };
+}
+
+/* ---------- helpers ---------- */
+function projectColor(name){
+  if(!name) return "#6d778c";
+  if(!state.projects[name]){
+    const used = Object.keys(state.projects).length;
+    state.projects[name] = PALETTE[used % PALETTE.length];
+  }
+  return state.projects[name];
+}
+function dueInfo(iso){
+  if(!iso) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due = new Date(iso+"T00:00:00");
+  const days = Math.round((due-today)/864e5);
+  const cls = days < 0 ? "over" : days <= 3 ? "soon" : "";
+  const note = days < 0 ? `${-days}d late` : days === 0 ? "today" : days === 1 ? "tomorrow" : "";
+  return {cls, note, label: due.toLocaleDateString(undefined,{day:"2-digit",month:"2-digit",year:"numeric"})};
+}
+function visible(t){
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const f = document.getElementById("filter").value;
+  if(f && t.project !== f) return false;
+  if(!q) return true;
+  return (t.title+" "+(t.project||"")+" "+(t.notes||"")+" "+t.subtasks.map(s=>s.text).join(" ")).toLowerCase().includes(q);
+}
+function toast(msg){
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.classList.add("show");
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove("show"),2200);
+}
+
+/* ---------- board ---------- */
+function renderBoard(){
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  state.columns.forEach(col=>{
+    const tasks = state.tasks.filter(t=>t.colId===col.id && visible(t));
+    const el = document.createElement("section");
+    el.className = "col"; el.dataset.id = col.id; el.style.setProperty("--c", col.color);
+    el.innerHTML = `
+      <div class="col-head">
+        <button class="swatch" title="Change colour" data-act="color"></button>
+        <input class="col-title" value="${esc(col.name)}" aria-label="Column name">
+        <span class="count">${tasks.length}</span>
+        <button class="icon" data-act="left" title="Move left">‹</button>
+        <button class="icon" data-act="right" title="Move right">›</button>
+        <button class="icon" data-act="del" title="Delete column">✕</button>
+      </div>
+      <div class="col-body" data-body></div>
+      <div class="col-foot"><button class="add-item">+ Add item</button></div>`;
+
+    const body = el.querySelector("[data-body]");
+    tasks.forEach(t=>body.appendChild(cardEl(t, col.color)));
+    if(!tasks.length) body.insertAdjacentHTML("beforeend",`<div class="empty">Nothing here yet.</div>`);
+
+    el.querySelector(".col-title").addEventListener("input", e=>{ col.name = e.target.value; });
+    el.querySelector('[data-act="color"]').onclick = ()=>{
+      col.color = PALETTE[(PALETTE.indexOf(col.color)+1) % PALETTE.length]; renderBoard();
+    };
+    el.querySelector('[data-act="left"]').onclick = ()=>moveCol(col.id,-1);
+    el.querySelector('[data-act="right"]').onclick = ()=>moveCol(col.id, 1);
+    el.querySelector('[data-act="del"]').onclick = ()=>{
+      if(state.tasks.some(t=>t.colId===col.id)) return toast("Move or delete its cards first.");
+      if(state.columns.length===1) return toast("Keep at least one column.");
+      state.columns = state.columns.filter(c=>c.id!==col.id); renderBoard();
+    };
+    el.querySelector(".add-item").onclick = ()=>addTask(col.id);
+
+    body.addEventListener("dragover", e=>{
+      e.preventDefault(); body.classList.add("dragover");
+      const dragging = document.querySelector(".card.dragging"); if(!dragging) return;
+      body.querySelector(".empty")?.remove();
+      const after = afterElement(body, e.clientY);
+      after ? body.insertBefore(dragging, after) : body.appendChild(dragging);
+    });
+    body.addEventListener("dragleave", ()=>body.classList.remove("dragover"));
+    body.addEventListener("drop", e=>{ e.preventDefault(); body.classList.remove("dragover"); syncFromDOM(); });
+
+    board.appendChild(el);
+  });
+  const done = state.tasks.filter(t=>t.subtasks.length && t.subtasks.every(s=>s.done)).length;
+  document.getElementById("stats").textContent = `${state.tasks.length} tasks · ${done} fully checked`;
+  refreshFilter();
+}
+
+function cardEl(t, color){
+  const el = document.createElement("article");
+  el.className = "card" + (t.id===openId ? " selected" : "");
+  el.draggable = true; el.dataset.id = t.id; el.tabIndex = 0;
+  el.style.setProperty("--c", color);
+  const due = dueInfo(t.deadline);
+  const doneN = t.subtasks.filter(s=>s.done).length;
+  el.innerHTML = `
+    <div class="card-title">${esc(t.title||"Untitled")}</div>
+    <div class="meta">
+      ${t.project ? `<span class="tag" style="--p:${projectColor(t.project)}">${esc(t.project)}</span>`:""}
+      ${due ? `<span class="due ${due.cls}">${due.label}${due.note?" · "+due.note:""}</span>`:""}
+      ${t.links.length ? `<span class="prog">🔗 ${t.links.length}</span>`:""}
+    </div>
+    ${t.subtasks.length ? `
+      <div class="card-subs">
+        <div class="lbl">Subtasks · <span class="${doneN===t.subtasks.length?"prog done":""}">${doneN}/${t.subtasks.length}</span></div>
+        ${t.subtasks.map(s=>`
+          <label class="card-sub ${s.done?"done":""}">
+            <input type="checkbox" data-sub="${s.id}" ${s.done?"checked":""}>
+            <span>${esc(s.text||"Untitled subtask")}</span>
+          </label>`).join("")}
+      </div>`:""}`;
+  el.querySelectorAll("[data-sub]").forEach(box=>{
+    box.addEventListener("click", e=>e.stopPropagation());
+    box.addEventListener("change", e=>{
+      e.stopPropagation();
+      const s = t.subtasks.find(x=>x.id===box.dataset.sub);
+      s.done = box.checked;
+      box.closest(".card-sub").classList.toggle("done", s.done);
+      renderBoard(); if(openId===t.id) renderPanel();
+    });
+  });
+  el.querySelectorAll(".card-sub").forEach(l=>l.addEventListener("click", e=>e.stopPropagation()));
+  el.onclick = ()=>openTask(t.id);
+  el.onkeydown = e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); openTask(t.id);} };
+  el.addEventListener("dragstart", ()=>el.classList.add("dragging"));
+  el.addEventListener("dragend", ()=>{ el.classList.remove("dragging"); syncFromDOM(); });
+  return el;
+}
+
+function afterElement(container, y){
+  const cards = [...container.querySelectorAll(".card:not(.dragging)")];
+  return cards.find(c=>{ const r = c.getBoundingClientRect(); return y < r.top + r.height/2; }) || null;
+}
+
+function syncFromDOM(){
+  const ordered = [], seen = new Set();
+  document.querySelectorAll(".col").forEach(colEl=>{
+    colEl.querySelectorAll(".card").forEach(cardEl=>{
+      const t = state.tasks.find(x=>x.id===cardEl.dataset.id);
+      if(t && !seen.has(t.id)){ t.colId = colEl.dataset.id; ordered.push(t); seen.add(t.id); }
+    });
+  });
+  state.tasks.forEach(t=>{ if(!seen.has(t.id)) ordered.push(t); });
+  state.tasks = ordered;
+  renderBoard(); if(openId) renderPanel();
+}
+
+function moveCol(id, dir){
+  const i = state.columns.findIndex(c=>c.id===id), j = i+dir;
+  if(j<0 || j>=state.columns.length) return;
+  [state.columns[i], state.columns[j]] = [state.columns[j], state.columns[i]];
+  renderBoard();
+}
+
+function addTask(colId){
+  const t = {id:uid(), colId, title:"", project:"", deadline:"", notes:"", links:[], subtasks:[]};
+  state.tasks.push(t); openTask(t.id);
+  setTimeout(()=>document.querySelector(".panel-title")?.focus(), 60);
+}
+
+/* ---------- side panel ---------- */
+function openTask(id){ openId = id; document.getElementById("panel").classList.add("open");
+  document.getElementById("panel").setAttribute("aria-hidden","false"); renderPanel(); renderBoard(); }
+function closePanel(){ openId = null; document.getElementById("panel").classList.remove("open");
+  document.getElementById("panel").setAttribute("aria-hidden","true"); renderBoard(); }
+
+function renderPanel(){
+  const t = state.tasks.find(x=>x.id===openId); if(!t) return closePanel();
+  const body = document.getElementById("panelBody");
+  const due = dueInfo(t.deadline);
+  body.innerHTML = `
+    <textarea class="panel-title" rows="1" placeholder="Task title">${esc(t.title)}</textarea>
+    <div class="row"><label for="p-col">Status</label>
+      <select id="p-col">${state.columns.map(c=>`<option value="${c.id}" ${c.id===t.colId?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
+    </div>
+    <div class="row"><label for="p-proj">Project</label>
+      <input id="p-proj" list="projects" value="${esc(t.project)}" placeholder="e.g. Battery">
+      <datalist id="projects">${Object.keys(state.projects).map(p=>`<option value="${esc(p)}">`).join("")}</datalist>
+    </div>
+    <div class="row"><label for="p-due">Deadline ${due&&due.note?`· <span class="due ${due.cls}" style="border:none;padding:0">${due.note}</span>`:""}</label>
+      <input id="p-due" type="date" value="${esc(t.deadline)}">
+    </div>
+    <div class="row"><label>Useful links</label>
+      <div class="list" id="p-links">
+        ${t.links.map((l,i)=>`
+          <div class="link-row" data-i="${i}">
+            <input data-k="label" value="${esc(l.label)}" placeholder="Label">
+            <input data-k="url" value="${esc(l.url)}" placeholder="https://">
+            <a href="${esc(l.url)}" target="_blank" rel="noopener" title="Open">↗</a>
+            <button class="icon" data-act="rm-link">✕</button>
+          </div>`).join("") || `<div class="empty">No links yet.</div>`}
+      </div>
+      <div class="inline-add" style="margin-top:6px">
+        <input id="newLinkLabel" placeholder="Label"><input id="newLinkUrl" placeholder="https://">
+        <button class="btn" id="addLink">Add</button>
+      </div>
+    </div>
+    <div class="row"><label>Subtasks ${t.subtasks.length?`· ${t.subtasks.filter(s=>s.done).length}/${t.subtasks.length}`:""}</label>
+      <div class="list" id="p-subs">
+        ${t.subtasks.map(s=>`
+          <div class="sub ${s.done?"done":""}" data-id="${s.id}">
+            <input type="checkbox" ${s.done?"checked":""} aria-label="Mark done">
+            <input type="text" value="${esc(s.text)}">
+            <button class="icon" data-act="rm-sub">✕</button>
+          </div>`).join("") || `<div class="empty">No subtasks yet.</div>`}
+      </div>
+      <div class="inline-add" style="margin-top:6px">
+        <input id="newSub" placeholder="Add a subtask"><button class="btn" id="addSub">Add</button>
+      </div>
+    </div>
+    <div class="row"><label for="p-notes">Notes</label>
+      <textarea id="p-notes" placeholder="Anything worth remembering">${esc(t.notes)}</textarea>
+    </div>`;
+
+  const title = body.querySelector(".panel-title");
+  const grow = ()=>{ title.style.height="auto"; title.style.height = title.scrollHeight+"px"; };
+  grow(); title.addEventListener("input", ()=>{ t.title = title.value; grow(); renderBoard(); });
+
+  body.querySelector("#p-col").onchange = e=>{ t.colId = e.target.value; renderBoard(); };
+  body.querySelector("#p-proj").addEventListener("input", e=>{ t.project = e.target.value.trim(); projectColor(t.project); renderBoard(); });
+  body.querySelector("#p-due").onchange = e=>{ t.deadline = e.target.value; renderPanel(); renderBoard(); };
+  body.querySelector("#p-notes").addEventListener("input", e=>{ t.notes = e.target.value; });
+
+  body.querySelectorAll("#p-links .link-row").forEach(row=>{
+    const i = +row.dataset.i;
+    row.querySelectorAll("input").forEach(inp=>inp.addEventListener("input", ()=>{ t.links[i][inp.dataset.k] = inp.value; renderBoard(); }));
+    row.querySelector('[data-act="rm-link"]').onclick = ()=>{ t.links.splice(i,1); renderPanel(); renderBoard(); };
+  });
+  const addLink = ()=>{
+    const label = body.querySelector("#newLinkLabel").value.trim();
+    const url = body.querySelector("#newLinkUrl").value.trim();
+    if(!label && !url) return;
+    t.links.push({label: label||url, url}); renderPanel(); renderBoard();
+    body.querySelector("#newLinkLabel").focus();
+  };
+  body.querySelector("#addLink").onclick = addLink;
+  body.querySelector("#newLinkUrl").onkeydown = e=>{ if(e.key==="Enter") addLink(); };
+
+  body.querySelectorAll("#p-subs .sub").forEach(row=>{
+    const s = t.subtasks.find(x=>x.id===row.dataset.id);
+    row.querySelector('input[type=checkbox]').onchange = e=>{ s.done = e.target.checked; row.classList.toggle("done", s.done); renderBoard(); };
+    row.querySelector('input[type=text]').addEventListener("input", e=>{ s.text = e.target.value; renderBoard(); });
+    row.querySelector('[data-act="rm-sub"]').onclick = ()=>{ t.subtasks = t.subtasks.filter(x=>x.id!==s.id); renderPanel(); renderBoard(); };
+  });
+  const addSub = ()=>{
+    const inp = body.querySelector("#newSub"); const text = inp.value.trim(); if(!text) return;
+    t.subtasks.push({id:uid(), text, done:false}); renderPanel(); renderBoard();
+    body.querySelector("#newSub").focus();
+  };
+  body.querySelector("#addSub").onclick = addSub;
+  body.querySelector("#newSub").onkeydown = e=>{ if(e.key==="Enter") addSub(); };
+}
+
+/* ---------- filter, import/export ---------- */
+function refreshFilter(){
+  const sel = document.getElementById("filter"), cur = sel.value;
+  const names = [...new Set(state.tasks.map(t=>t.project).filter(Boolean))].sort();
+  sel.innerHTML = `<option value="">All projects</option>` + names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  sel.value = names.includes(cur) ? cur : "";
+}
+document.getElementById("search").addEventListener("input", renderBoard);
+document.getElementById("filter").addEventListener("change", renderBoard);
+document.getElementById("addCol").onclick = ()=>{
+  state.columns.push({id:uid(), name:"New column", color:PALETTE[state.columns.length % PALETTE.length]});
+  renderBoard();
+  const inputs = document.querySelectorAll(".col-title");
+  inputs[inputs.length-1].select();
+};
+document.getElementById("export").onclick = ()=>{
+  const blob = new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `todo-board-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("Board exported as JSON.");
+};
+document.getElementById("importBtn").onclick = ()=>document.getElementById("importFile").click();
+document.getElementById("importFile").onchange = e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!Array.isArray(data.columns) || !Array.isArray(data.tasks)) throw new Error("shape");
+      data.projects = data.projects || {};
+      data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; });
+      state = data; closePanel(); renderBoard(); toast(`Imported ${state.tasks.length} tasks.`);
+    }catch(err){ toast("That file isn't a board export. Pick a JSON exported from here."); }
+    e.target.value = "";
+  };
+  reader.readAsText(file);
+};
+document.getElementById("closePanel").onclick = closePanel;
+document.getElementById("deleteTask").onclick = ()=>{
+  state.tasks = state.tasks.filter(t=>t.id!==openId); closePanel(); toast("Task deleted.");
+};
+
+/* ---------- github gist sync ---------- */
+const GIST_FILE = "taskify-board.json";
+const mem = {};
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return k in mem ? mem[k] : null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){ mem[k]=v; } },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){ delete mem[k]; } }
+};
+const sync = {
+  token: store.get("taskify.token") || "",
+  gistId: store.get("taskify.gist") || "",
+  auto: store.get("taskify.auto") === "1",
+  busy:false, error:"", savedAt:null
+};
+let lastPushed = null;
+const serialize = ()=>JSON.stringify({columns:state.columns, projects:state.projects, tasks:state.tasks}, null, 2);
+const connected = ()=>Boolean(sync.token && sync.gistId);
+const dirty = ()=>serialize() !== lastPushed;
+
+const $ = id => document.getElementById(id);
+$("gh-token").value = sync.token;
+$("gh-gist").value = sync.gistId;
+$("gistAuto").checked = sync.auto;
+
+function syncUI(){
+  const dot = $("syncDot"), label = $("syncLabel"), status = $("syncStatus");
+  const stateName = sync.busy ? "busy" : sync.error ? "err" : !connected() ? "" : dirty() ? "dirty" : "ok";
+  dot.className = "dot " + stateName;
+  label.textContent = sync.busy ? "Syncing" : !connected() ? "Gist sync" : dirty() ? "Unsaved" : "Synced";
+  status.className = "status " + (sync.error ? "err" : connected() && !dirty() ? "ok" : "");
+  status.textContent = sync.error ? sync.error
+    : sync.busy ? "Talking to GitHub…"
+    : !sync.token ? "Add a token to connect."
+    : !sync.gistId ? "Add a gist ID, or create a new gist."
+    : sync.savedAt ? (dirty() ? "Changes not saved yet. Last save " + sync.savedAt.toLocaleTimeString() + "."
+                              : "Saved at " + sync.savedAt.toLocaleTimeString() + ".")
+    : "Connected. Nothing saved yet.";
+}
+
+async function gh(path, opts={}){
+  const res = await fetch("https://api.github.com" + path, {
+    ...opts,
+    headers:{
+      "Accept":"application/vnd.github+json",
+      "Authorization":"Bearer " + sync.token,
+      "Content-Type":"application/json",
+      "X-GitHub-Api-Version":"2022-11-28"
+    }
+  });
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok){
+    if(res.status === 401) throw new Error("GitHub rejected the token. Check it has the gist scope and hasn't expired.");
+    if(res.status === 404) throw new Error("Gist not found. Check the ID, or create a new gist.");
+    throw new Error(data.message || `GitHub returned ${res.status}.`);
+  }
+  return data;
+}
+
+async function run(job, okMsg){
+  if(sync.busy) return;
+  sync.busy = true; sync.error = ""; syncUI();
+  try{ await job(); toast(okMsg); }
+  catch(err){ sync.error = err.message || "Sync failed."; toast(sync.error); }
+  finally{ sync.busy = false; syncUI(); }
+}
+
+function pushGist(){
+  if(!sync.token) return toast("Add a token first."), syncUI();
+  if(!sync.gistId) return toast("Add a gist ID, or create a new gist."), syncUI();
+  return run(async ()=>{
+    const body = serialize();
+    await gh("/gists/" + sync.gistId, {method:"PATCH", body: JSON.stringify({files:{[GIST_FILE]:{content: body}}})});
+    lastPushed = body; sync.savedAt = new Date();
+  }, "Board saved to gist.");
+}
+
+function pullGist(){
+  if(!connected()) return toast("Add a token and a gist ID first.");
+  return run(async ()=>{
+    const gist = await gh("/gists/" + sync.gistId);
+    const file = gist.files[GIST_FILE] || Object.values(gist.files).find(f=>f.filename.endsWith(".json"));
+    if(!file) throw new Error(`That gist has no ${GIST_FILE} file.`);
+    const text = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
+    const data = JSON.parse(text);
+    if(!Array.isArray(data.columns) || !Array.isArray(data.tasks)) throw new Error("That gist doesn't hold a Taskify board.");
+    data.projects = data.projects || {};
+    data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; });
+    state = data; closePanel(); renderBoard();
+    lastPushed = serialize(); sync.savedAt = new Date();
+  }, "Board loaded from gist.");
+}
+
+function createGist(){
+  if(!sync.token) return toast("Add a token first.");
+  return run(async ()=>{
+    const body = serialize();
+    const gist = await gh("/gists", {method:"POST", body: JSON.stringify({
+      description:"Taskify board", public:false, files:{[GIST_FILE]:{content: body}}
+    })});
+    sync.gistId = gist.id; store.set("taskify.gist", gist.id);
+    $("gh-gist").value = gist.id;
+    lastPushed = body; sync.savedAt = new Date();
+  }, "Secret gist created and saved.");
+}
+
+$("gh-token").addEventListener("input", e=>{
+  sync.token = e.target.value.trim(); sync.error = "";
+  store.set("taskify.token", sync.token); syncUI();
+});
+$("gh-gist").addEventListener("input", e=>{
+  let v = e.target.value.trim();
+  const m = v.match(/([0-9a-f]{20,})/i); if(m) v = m[1];   // accept a pasted gist URL
+  sync.gistId = v; sync.error = ""; store.set("taskify.gist", v); syncUI();
+});
+$("gistAuto").addEventListener("change", e=>{ sync.auto = e.target.checked; store.set("taskify.auto", sync.auto?"1":"0"); });
+$("gistPush").onclick = pushGist;
+$("gistPull").onclick = pullGist;
+$("gistCreate").onclick = createGist;
+$("gistForget").onclick = ()=>{
+  sync.token = ""; store.del("taskify.token"); $("gh-token").value = ""; sync.error = "";
+  syncUI(); toast("Token removed from this browser.");
+};
+$("syncBtn").onclick = ()=>{ $("syncModal").classList.add("open"); syncUI(); $("gh-token").focus(); };
+$("syncClose").onclick = ()=>$("syncModal").classList.remove("open");
+$("syncModal").addEventListener("click", e=>{ if(e.target === $("syncModal")) $("syncModal").classList.remove("open"); });
+
+setInterval(()=>{
+  syncUI();
+  if(sync.auto && connected() && !sync.busy && !sync.error && dirty()) pushGist();
+}, 5000);
+
+document.addEventListener("keydown", e=>{
+  if(e.key !== "Escape") return;
+  if($("syncModal").classList.contains("open")) $("syncModal").classList.remove("open");
+  else if(openId) closePanel();
+});
+window.addEventListener("beforeunload", e=>{
+  if(state.tasks.length && dirty()){ e.preventDefault(); e.returnValue = ""; }
+});
+syncUI();
+
+renderBoard();
+</script>
