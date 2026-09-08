@@ -180,6 +180,10 @@
   .sub input[type=checkbox]{width:15px;height:15px;margin:3px 0 0;accent-color:var(--ok);cursor:pointer;flex:0 0 auto}
   .sub input[type=text]{flex:1;width:auto;background:none;border:none;outline:none;padding:0;min-width:0}
   .sub.done input[type=text]{text-decoration:line-through;color:var(--muted)}
+  .sub .grip{flex:0 0 auto;color:var(--muted);cursor:grab;user-select:none;padding:0 1px;line-height:1.3}
+  .sub .grip:hover{color:var(--text)}
+  .sub[draggable=true]{cursor:grabbing}
+  .sub.dragging{opacity:.5;border-color:var(--accent)}
   .link-row{display:flex;gap:6px;align-items:center}
   .link-row input{flex:1;width:auto;min-width:0}
   .link-row a{color:var(--accent);text-decoration:none;padding:0 4px}
@@ -552,6 +556,7 @@ function renderPanel(){
       <div class="list" id="p-subs">
         ${t.subtasks.map(s=>`
           <div class="sub ${s.done?"done":""}" data-id="${s.id}">
+            <span class="grip" title="Drag to reorder" aria-hidden="true">⠿</span>
             <input type="checkbox" ${s.done?"checked":""} aria-label="Mark done">
             <input type="text" value="${esc(s.text)}">
             <button class="icon" data-act="rm-sub">✕</button>
@@ -589,10 +594,43 @@ function renderPanel(){
   body.querySelector("#addLink").onclick = addLink;
   body.querySelector("#newLinkUrl").onkeydown = e=>{ if(e.key==="Enter") addLink(); };
 
+  const subList = body.querySelector("#p-subs");
+  const saveSubOrder = ()=>{
+    const ids = [...subList.querySelectorAll(".sub")].map(r=>r.dataset.id);
+    t.subtasks = ids.map(id=>t.subtasks.find(s=>s.id===id)).filter(Boolean);
+    renderBoard();
+  };
+  const moveSub = (id, dir)=>{
+    const i = t.subtasks.findIndex(s=>s.id===id), j = i+dir;
+    if(i<0 || j<0 || j>=t.subtasks.length) return;
+    [t.subtasks[i], t.subtasks[j]] = [t.subtasks[j], t.subtasks[i]];
+    renderPanel(); renderBoard();
+    const input = document.querySelector(`#p-subs .sub[data-id="${id}"] input[type=text]`);
+    input?.focus();
+  };
+  subList.addEventListener("dragover", e=>{
+    const dragging = subList.querySelector(".sub.dragging"); if(!dragging) return;
+    e.preventDefault();
+    const rows = [...subList.querySelectorAll(".sub:not(.dragging)")];
+    const after = rows.find(r=>{ const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height/2; });
+    after ? subList.insertBefore(dragging, after) : subList.appendChild(dragging);
+  });
+  subList.addEventListener("drop", e=>{ e.preventDefault(); saveSubOrder(); });
+
   body.querySelectorAll("#p-subs .sub").forEach(row=>{
     const s = t.subtasks.find(x=>x.id===row.dataset.id);
+    const grip = row.querySelector(".grip");
+    grip.addEventListener("mousedown", ()=>{ row.draggable = true; });
+    grip.addEventListener("touchstart", ()=>{ row.draggable = true; }, {passive:true});
+    row.addEventListener("dragstart", e=>{ row.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
+    row.addEventListener("dragend", ()=>{ row.classList.remove("dragging"); row.draggable = false; saveSubOrder(); });
     row.querySelector('input[type=checkbox]').onchange = e=>{ s.done = e.target.checked; row.classList.toggle("done", s.done); renderBoard(); };
     row.querySelector('input[type=text]').addEventListener("input", e=>{ s.text = e.target.value; renderBoard(); });
+    row.querySelector('input[type=text]').addEventListener("keydown", e=>{
+      if(!e.altKey) return;
+      if(e.key === "ArrowUp"){ e.preventDefault(); moveSub(s.id,-1); }
+      if(e.key === "ArrowDown"){ e.preventDefault(); moveSub(s.id, 1); }
+    });
     row.querySelector('[data-act="rm-sub"]').onclick = ()=>{ t.subtasks = t.subtasks.filter(x=>x.id!==s.id); renderPanel(); renderBoard(); };
   });
   const addSub = ()=>{
