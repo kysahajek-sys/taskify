@@ -111,7 +111,10 @@
     flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:9px;min-height:70px;
   }
   .col-body.dragover{background:var(--wash)}
-  .col-foot{padding:0 10px 10px}
+  .col-foot{padding:0 10px 10px;display:flex;flex-direction:column;gap:6px}
+  .col.archived .col-head{opacity:.9}
+  .reveal{color:var(--text);border-style:solid;border-color:var(--line)}
+  .reveal:hover{border-color:var(--hover-line);background:var(--hover-fill)}
   .add-item{
     width:100%;text-align:left;color:var(--muted);padding:7px 8px;
     border:1px dashed var(--line);border-radius:var(--radius);
@@ -305,7 +308,7 @@ function seed(){
   const cols = [
     {id:"c1", name:"In Progress", color:PALETTE[1]},
     {id:"c2", name:"Done",        color:PALETTE[2]},
-    {id:"c3", name:"Accepted",    color:PALETTE[0]},
+    {id:"c3", name:"Accepted",    color:PALETTE[0], archived:true},
   ];
   const task = (title, project, subs) => ({
     id:uid(), colId:"c1", title, project, deadline:"", notes:"", links:[],
@@ -363,31 +366,52 @@ function toast(msg){
 /* ---------- board ---------- */
 function renderBoard(){
   const board = document.getElementById("board");
+  const searching = document.getElementById("search").value.trim() !== "";
   board.innerHTML = "";
   state.columns.forEach(col=>{
     const tasks = state.tasks.filter(t=>t.colId===col.id && visible(t));
+    const shown = !col.archived || col.expanded || searching;
     const el = document.createElement("section");
-    el.className = "col"; el.dataset.id = col.id; el.style.setProperty("--c", col.color);
+    el.className = "col" + (col.archived ? " archived" : ""); el.dataset.id = col.id;
+    el.style.setProperty("--c", col.color);
     el.innerHTML = `
       <div class="col-head">
         <button class="swatch" title="Change colour" data-act="color"></button>
         <input class="col-title" value="${esc(col.name)}" aria-label="Column name">
         <span class="count">${tasks.length}</span>
+        <button class="icon" data-act="archive" title="${col.archived?"Stop archiving: always show these tasks":"Archive: keep these tasks hidden"}">${col.archived?"📦":"🗄"}</button>
         <button class="icon" data-act="left" title="Move left">‹</button>
         <button class="icon" data-act="right" title="Move right">›</button>
         <button class="icon" data-act="del" title="Delete column">✕</button>
       </div>
       <div class="col-body" data-body></div>
-      <div class="col-foot"><button class="add-item">+ Add item</button></div>`;
+      <div class="col-foot">
+        ${col.archived && !searching ? `<button class="add-item reveal" data-act="reveal">${
+            col.expanded ? `Hide ${col.name.toLowerCase()} tasks` : `Show ${tasks.length} ${col.name.toLowerCase()} task${tasks.length===1?"":"s"}`
+          }</button>` : ""}
+        <button class="add-item">+ Add item</button>
+      </div>`;
 
     const body = el.querySelector("[data-body]");
-    tasks.forEach(t=>body.appendChild(cardEl(t, col.color)));
-    if(!tasks.length) body.insertAdjacentHTML("beforeend",`<div class="empty">Nothing here yet.</div>`);
+    if(shown){
+      tasks.forEach(t=>body.appendChild(cardEl(t, col.color)));
+      if(!tasks.length) body.insertAdjacentHTML("beforeend",`<div class="empty">Nothing here yet.</div>`);
+    }else{
+      body.insertAdjacentHTML("beforeend",
+        `<div class="empty">${tasks.length} archived task${tasks.length===1?"":"s"}. Drop a card here to archive it.</div>`);
+    }
 
     el.querySelector(".col-title").addEventListener("input", e=>{ col.name = e.target.value; });
     el.querySelector('[data-act="color"]').onclick = ()=>{
       col.color = PALETTE[(PALETTE.indexOf(col.color)+1) % PALETTE.length]; renderBoard();
     };
+    el.querySelector('[data-act="archive"]').onclick = ()=>{
+      col.archived = !col.archived; col.expanded = false; renderBoard();
+      toast(col.archived ? `“${col.name}” tasks are hidden now.` : `“${col.name}” tasks are always shown now.`);
+    };
+    el.querySelector('[data-act="reveal"]')?.addEventListener("click", ()=>{
+      col.expanded = !col.expanded; renderBoard();
+    });
     el.querySelector('[data-act="left"]').onclick = ()=>moveCol(col.id,-1);
     el.querySelector('[data-act="right"]').onclick = ()=>moveCol(col.id, 1);
     el.querySelector('[data-act="del"]').onclick = ()=>{
