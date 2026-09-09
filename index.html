@@ -25,6 +25,7 @@
     --ok:#4fae6a;
     --radius:8px;
     --mono:"JetBrains Mono","Cascadia Code",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:Inter,"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",Arial,sans-serif;
     --hover-line:#3d465c;
     --hover-fill:#242938;
     --wash:rgba(255,255,255,.06);
@@ -51,7 +52,8 @@
   html,body{height:100%}
   body{
     margin:0;background:var(--bg);color:var(--text);
-    font-family:var(--mono);font-size:13px;line-height:1.45;
+    font-family:var(--sans);font-size:13.5px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;
     display:flex;flex-direction:column;overflow:hidden;
   }
   button,input,select,textarea{font:inherit;color:inherit}
@@ -63,7 +65,7 @@
     display:flex;align-items:center;gap:10px;flex-wrap:wrap;
     padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface);
   }
-  .brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;letter-spacing:.02em}
+  .brand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:-.01em}
   .brand span{color:var(--accent)}
   .spacer{flex:1}
   .field{
@@ -81,6 +83,35 @@
   .btn:hover{border-color:var(--hover-line);background:var(--hover-fill)}
   .btn-primary{border-color:var(--hover-line)}
   .count{color:var(--muted);font-size:12px}
+  [hidden]{display:none !important}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:2px}
+  .tab{padding:4px 12px;border-radius:6px;color:var(--muted)}
+  .tab:hover{color:var(--text)}
+  .tab.active{background:var(--hover-fill);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+
+  /* ---------- timer ---------- */
+  .timer-view{flex:1;overflow-y:auto;display:flex;justify-content:center;padding:28px 16px}
+  .timer-card{
+    width:380px;max-width:100%;height:max-content;
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:22px;display:flex;flex-direction:column;gap:14px;
+  }
+  .timer-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+  .timer-big{
+    font-family:var(--sans);font-size:clamp(36px,8vw,52px);font-weight:600;letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums;line-height:1.1;
+  }
+  .timer-big.over{color:var(--ok)}
+  .timer-big.pre{color:var(--muted)}
+  .timer-big.paused{color:var(--warn)}
+  .timer-bar{height:7px;border-radius:5px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
+  .timer-bar span{display:block;height:100%;width:0;background:var(--accent);transition:width .4s linear}
+  .timer-bar span.over{background:var(--ok)}
+  .timer-meta{color:var(--muted);font-size:12px}
+  .timer-form{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:4px}
+  @media (max-width:520px){.timer-form{grid-template-columns:1fr}}
 
   /* ---------- board ---------- */
   .board{
@@ -98,7 +129,7 @@
   }
   .col-title{
     flex:1;min-width:0;background:none;border:none;outline:none;
-    font-weight:700;color:var(--c);padding:2px 3px;border-radius:4px;
+    font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--c);padding:2px 3px;border-radius:4px;
   }
   .col-title:focus{background:var(--wash);color:var(--text)}
   .icon{
@@ -131,7 +162,7 @@
   .card:hover{border-color:color-mix(in srgb,var(--c) 55%,var(--line));border-left-color:var(--c)}
   .card.dragging{opacity:.45;cursor:grabbing}
   .card.selected{border-color:var(--accent);border-left-color:var(--accent)}
-  .card-title{font-weight:600;margin-bottom:6px;overflow-wrap:anywhere}
+  .card-title{font-size:15.5px;font-weight:600;letter-spacing:-.01em;line-height:1.3;margin-bottom:7px;overflow-wrap:anywhere}
   .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .tag{
     font-size:11px;padding:2px 7px;border-radius:20px;
@@ -139,14 +170,14 @@
     border:1px solid color-mix(in srgb,var(--p) 55%,transparent);
     color:color-mix(in srgb,var(--p) 75%,white);
   }
-  .due{font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+  .due{font-size:11px;font-family:var(--mono);padding:2px 7px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
   .due.soon{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
   .due.over{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 55%,transparent);background:rgba(217,83,79,.12)}
   .prog{font-size:11px;color:var(--muted)}
   .prog.done{color:var(--ok)}
   .card-subs{margin-top:8px;padding-top:7px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
   .card-subs .lbl{font-size:11px;color:var(--muted)}
-  .card-sub{display:flex;align-items:flex-start;gap:7px;font-size:12px;overflow-wrap:anywhere}
+  .card-sub{display:flex;align-items:flex-start;gap:7px;font-size:12.5px;overflow-wrap:anywhere}
   .card-sub input{width:13px;height:13px;margin:2px 0 0;accent-color:var(--ok);cursor:pointer;flex:0 0 auto}
   .card-sub.done span{text-decoration:line-through;color:var(--muted)}
 
@@ -166,7 +197,7 @@
   .panel-body{flex:1;overflow-y:auto;padding:14px 12px 40px;display:flex;flex-direction:column;gap:14px}
   .panel-title{
     width:100%;background:none;border:none;outline:none;resize:none;
-    font-size:16px;font-weight:700;line-height:1.35;overflow:hidden;
+    font-size:18px;font-weight:600;letter-spacing:-.01em;line-height:1.3;overflow:hidden;
   }
   .row label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
   .row input,.row select,.row textarea{
@@ -247,11 +278,15 @@
     </svg>
     <span>Taskify</span>
   </div>
-  <div class="field">🔍 <input id="search" type="search" placeholder="Search tasks" aria-label="Search tasks"></div>
-  <div class="field"><select id="filter" aria-label="Filter by project"><option value="">All projects</option></select></div>
+  <div class="tabs">
+    <button class="tab active" data-view="board">Board</button>
+    <button class="tab" data-view="timer">Timer</button>
+  </div>
+  <div class="field board-only">🔍 <input id="search" type="search" placeholder="Search tasks" aria-label="Search tasks"></div>
+  <div class="field board-only"><select id="filter" aria-label="Filter by project"><option value="">All projects</option></select></div>
   <div class="spacer"></div>
-  <span class="count" id="stats"></span>
-  <button class="btn" id="addCol">+ Column</button>
+  <span class="count board-only" id="stats"></span>
+  <button class="btn board-only" id="addCol">+ Column</button>
   <button class="btn" id="export">Export</button>
   <button class="btn" id="importBtn">Import</button>
   <button class="btn" id="syncBtn"><span class="dot" id="syncDot"></span><span id="syncLabel">Gist sync</span></button>
@@ -260,6 +295,23 @@
 </header>
 
 <main class="board" id="board"></main>
+
+<main class="timer-view" id="timerView" hidden>
+  <section class="timer-card">
+    <div class="timer-big" id="timerBig">T−00:00:00</div>
+    <div class="timer-bar"><span id="timerFill"></span></div>
+    <div class="timer-meta" id="timerMeta"></div>
+    <div class="timer-form">
+      <div class="row"><label for="tStart">Start</label><input id="tStart" type="time"></div>
+      <div class="row"><label for="tHours">Hours</label><input id="tHours" type="number" min="0" max="24" step="0.25"></div>
+      <div class="row"><label for="tBreak">Break (min)</label><input id="tBreak" type="number" min="0" max="240" step="5"></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="tBreakBtn">Break</button>
+      <button class="btn" id="tNow">Start now</button>
+    </div>
+  </section>
+</main>
 
 <aside class="panel" id="panel" aria-label="Task details" aria-hidden="true">
   <div class="panel-head">
@@ -839,6 +891,104 @@ window.addEventListener("beforeunload", e=>{
   if(state.tasks.length && dirty()){ e.preventDefault(); e.returnValue = ""; }
 });
 syncUI();
+
+/* ---------- views ---------- */
+function setView(v){
+  document.body.dataset.view = v;
+  document.getElementById("board").hidden = v !== "board";
+  document.getElementById("timerView").hidden = v !== "timer";
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active", b.dataset.view === v));
+  document.querySelectorAll(".board-only").forEach(el=>{ el.hidden = v !== "board"; });
+  store.set("taskify.view", v);
+  if(v !== "timer") document.title = "Taskify";
+  if(v === "timer") tickTimer();
+}
+document.querySelectorAll(".tab").forEach(b=>b.onclick = ()=>setView(b.dataset.view));
+
+/* ---------- shift timer ---------- */
+const timer = {
+  start: store.get("taskify.timer.start") || "08:00",
+  hours: parseFloat(store.get("taskify.timer.hours") || "8"),
+  brk: parseFloat(store.get("taskify.timer.break") || "30"),
+  breakStart: store.get("taskify.timer.breakStart") || ""
+};
+$("tStart").value = timer.start;
+$("tHours").value = timer.hours;
+$("tBreak").value = Math.round(timer.brk);
+
+const clock = d => d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+function hms(ms){
+  const s = Math.floor(ms/1000);
+  return [Math.floor(s/3600), Math.floor(s/60)%60, s%60].map(n=>String(n).padStart(2,"0")).join(":");
+}
+function human(ms){
+  const m = Math.max(0, Math.round(ms/60000));
+  return `${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}m`;
+}
+function shiftStart(){
+  const [h,m] = (timer.start || "08:00").split(":").map(Number);
+  const d = new Date(); d.setHours(h||0, m||0, 0, 0);
+  return d;
+}
+const liveBreakMs = ()=> timer.breakStart ? Date.now() - Number(timer.breakStart) : 0;
+const totalBreakMs = ()=> (timer.brk||0)*60000 + liveBreakMs();
+const shiftEnd = ()=> new Date(shiftStart().getTime() + (timer.hours||0)*3600e3 + totalBreakMs());
+
+function tickTimer(){
+  const now = new Date(), start = shiftStart(), end = shiftEnd();
+  const left = end - now, total = end - start;
+  const onBreak = Boolean(timer.breakStart);
+  const big = $("timerBig"), fill = $("timerFill");
+
+  big.textContent = (left >= 0 ? "T−" : "T+") + hms(Math.abs(left));
+  big.className = "timer-big " + (onBreak ? "paused" : left < 0 ? "over" : now < start ? "pre" : "");
+
+  const pct = total > 0 ? ((now - start) / total) * 100 : 0;
+  fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  fill.className = left < 0 ? "over" : "";
+
+  $("timerMeta").textContent = onBreak
+    ? `On break ${hms(liveBreakMs())}`
+    : `Home ${clock(end)}`;
+  $("tBreakBtn").textContent = onBreak ? "End break" : "Break";
+
+  if(document.body.dataset.view === "timer"){
+    document.title = `${onBreak ? "☕ " : ""}${left >= 0 ? "T−" : "T+"}${hms(Math.abs(left)).slice(0,5)} · Taskify`;
+  }
+}
+function saveTimer(){
+  timer.start = $("tStart").value || "08:00";
+  timer.hours = Math.max(0, parseFloat($("tHours").value) || 0);
+  timer.brk = Math.max(0, parseFloat($("tBreak").value) || 0);
+  store.set("taskify.timer.start", timer.start);
+  store.set("taskify.timer.hours", String(timer.hours));
+  store.set("taskify.timer.break", String(timer.brk));
+  tickTimer();
+}
+["tStart","tHours","tBreak"].forEach(id=>$(id).addEventListener("input", saveTimer));
+$("tBreakBtn").onclick = ()=>{
+  if(timer.breakStart){
+    const ms = liveBreakMs();
+    timer.brk = (timer.brk || 0) + ms/60000;
+    timer.breakStart = "";
+    store.del("taskify.timer.breakStart");
+    store.set("taskify.timer.break", String(timer.brk));
+    $("tBreak").value = Math.round(timer.brk);
+    toast(`Break: ${hms(ms)}`);
+  }else{
+    timer.breakStart = String(Date.now());
+    store.set("taskify.timer.breakStart", timer.breakStart);
+    toast("Break started.");
+  }
+  tickTimer();
+};
+$("tNow").onclick = ()=>{
+  const now = new Date();
+  $("tStart").value = String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0");
+  saveTimer();
+};
+setInterval(tickTimer, 1000);
+setView(store.get("taskify.view") === "timer" ? "timer" : "board");
 
 renderBoard();
 </script>
