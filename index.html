@@ -999,7 +999,7 @@ const workedMs = (now = new Date())=> Math.max(0, now - shiftStart() - totalBrea
 
 function tickTimer(){
   checkWeek();
-  const now = new Date(), start = shiftStart(), end = shiftEnd();
+  const now = new Date(), start = shiftStart(), end = plainEnd(), early = shiftEnd();
   const left = end - now, total = end - start;
   const onBreak = Boolean(timer.breakStart);
   const stopped = Boolean(timer.stopped);
@@ -1020,7 +1020,7 @@ function tickTimer(){
 
   const bank = bankMin();
   const homeTxt = bank
-    ? `Home ${clock(plainEnd())} · with overtime ${clock(end)}`
+    ? `Home ${clock(end)} · with overtime ${clock(early)}`
     : `Home ${clock(end)}`;
   $("timerMeta").textContent = stopped ? "Done for today"
     : onBreak ? `On break ${hms(liveBreakMs())} · ${homeTxt.toLowerCase()}`
