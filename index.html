@@ -423,6 +423,13 @@ function toast(msg){
 function renderBoard(){
   const board = document.getElementById("board");
   const searching = document.getElementById("search").value.trim() !== "";
+  const scrollX = board.scrollLeft;
+  const scrollTops = {};
+  board.querySelectorAll(".col").forEach(c=>{
+    scrollTops[c.dataset.id] = c.querySelector("[data-body]")?.scrollTop || 0;
+  });
+  const active = document.activeElement;
+  const refocus = active?.dataset?.sub || null;
   board.innerHTML = "";
   state.columns.forEach(col=>{
     const tasks = state.tasks.filter(t=>t.colId===col.id && visible(t));
@@ -492,6 +499,13 @@ function renderBoard(){
   const done = state.tasks.filter(t=>t.subtasks.length && t.subtasks.every(s=>s.done)).length;
   document.getElementById("stats").textContent = `${state.tasks.length} tasks · ${done} fully checked`;
   refreshFilter();
+
+  board.scrollLeft = scrollX;
+  board.querySelectorAll(".col").forEach(c=>{
+    const b = c.querySelector("[data-body]");
+    if(b && scrollTops[c.dataset.id] != null) b.scrollTop = scrollTops[c.dataset.id];
+  });
+  if(refocus) board.querySelector(`[data-sub="${refocus}"]`)?.focus({preventScroll:true});
 }
 
 function cardEl(t, fallback){
