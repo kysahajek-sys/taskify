@@ -110,6 +110,20 @@
   .timer-bar span{display:block;height:100%;width:0;background:var(--accent);transition:width .4s linear}
   .timer-bar span.over{background:var(--ok)}
   .timer-meta{color:var(--muted);font-size:12px}
+  .week-strip{display:flex;flex-wrap:wrap;gap:4px;font-size:11px}
+  .week-strip span{padding:2px 6px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+  .week-strip .pos{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  .week-strip .neg{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
+  .week-strip .today{box-shadow:inset 0 0 0 1px var(--hover-line)}
+  .week-strip .total{color:var(--text);border-color:var(--hover-line);font-weight:600}
+  .week-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .week-row .week-strip{flex:1}
+  .btn.tiny{padding:2px 9px;font-size:11px}
+  .week-editor{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:12px}
+  .week-editor .er{display:flex;align-items:center;gap:8px}
+  .week-editor .er label{flex:1;font-size:12px}
+  .week-editor .er input{width:82px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:5px 7px;outline:none;text-align:right}
+  .week-editor .er input:focus{border-color:var(--hover-line)}
   .timer-form{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:4px}
   @media (max-width:520px){.timer-form{grid-template-columns:1fr}}
 
@@ -301,6 +315,11 @@
     <div class="timer-big" id="timerBig">T−00:00:00</div>
     <div class="timer-bar"><span id="timerFill"></span></div>
     <div class="timer-meta" id="timerMeta"></div>
+    <div class="week-row">
+      <div class="week-strip" id="weekStrip"></div>
+      <button class="btn tiny" id="weekEdit">Edit</button>
+    </div>
+    <div class="week-editor" id="weekEditor" hidden></div>
     <div class="timer-form">
       <div class="row"><label for="tStart">Start</label><input id="tStart" type="time"></div>
       <div class="row"><label for="tHours">Hours</label><input id="tHours" type="number" min="0" max="24" step="0.25"></div>
@@ -308,6 +327,7 @@
     </div>
     <div class="actions">
       <button class="btn btn-primary" id="tBreakBtn">Break</button>
+      <button class="btn" id="tStop">Stop work</button>
       <button class="btn" id="tNow">Start now</button>
     </div>
   </section>
@@ -924,8 +944,35 @@ const timer = {
   start: store.get("taskify.timer.start") || "08:00",
   hours: parseFloat(store.get("taskify.timer.hours") || "8"),
   brk: parseFloat(store.get("taskify.timer.break") || "30"),
-  breakStart: store.get("taskify.timer.breakStart") || ""
+  breakStart: store.get("taskify.timer.breakStart") || "",
+  stopped: store.get("taskify.timer.stopped") || "",
+  entry: parseFloat(store.get("taskify.timer.entry") || "0"),
+  log: {}
 };
+try{ timer.log = JSON.parse(store.get("taskify.timer.log") || "{}"); }catch(e){ timer.log = {}; }
+
+const pad = n => String(n).padStart(2,"0");
+const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+function weekKey(d = new Date()){
+  const m = new Date(d); m.setHours(0,0,0,0);
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));   // back to Monday
+  return dayKey(m);
+}
+function checkWeek(){
+  const wk = weekKey();
+  if(store.get("taskify.timer.week") !== wk){
+    store.set("taskify.timer.week", wk);
+    timer.log = {}; store.set("taskify.timer.log", "{}");
+  }
+}
+checkWeek();
+const bankMin = ()=> Object.values(timer.log).reduce((a,b)=>a+b, 0);
+const signed = min => (min < 0 ? "−" : "+") + `${Math.floor(Math.abs(min)/60)}h ${pad(Math.round(Math.abs(min)%60))}m`;
+function saveLog(){
+  store.set("taskify.timer.log", JSON.stringify(timer.log));
+  store.set("taskify.timer.week", weekKey());
+}
+
 $("tStart").value = timer.start;
 $("tHours").value = timer.hours;
 $("tBreak").value = Math.round(timer.brk);
@@ -946,29 +993,94 @@ function shiftStart(){
 }
 const liveBreakMs = ()=> timer.breakStart ? Date.now() - Number(timer.breakStart) : 0;
 const totalBreakMs = ()=> (timer.brk||0)*60000 + liveBreakMs();
-const shiftEnd = ()=> new Date(shiftStart().getTime() + (timer.hours||0)*3600e3 + totalBreakMs());
+const plainEnd = ()=> new Date(shiftStart().getTime() + (timer.hours||0)*3600e3 + totalBreakMs());
+const shiftEnd = ()=> new Date(plainEnd().getTime() - bankMin()*60000);
+const workedMs = (now = new Date())=> Math.max(0, now - shiftStart() - totalBreakMs());
 
 function tickTimer(){
+  checkWeek();
   const now = new Date(), start = shiftStart(), end = shiftEnd();
   const left = end - now, total = end - start;
   const onBreak = Boolean(timer.breakStart);
+  const stopped = Boolean(timer.stopped);
+  const today = timer.log[dayKey(now)] || 0;
   const big = $("timerBig"), fill = $("timerFill");
 
-  big.textContent = (left >= 0 ? "T−" : "T+") + hms(Math.abs(left));
-  big.className = "timer-big " + (onBreak ? "paused" : left < 0 ? "over" : now < start ? "pre" : "");
+  if(stopped){
+    big.textContent = (today < 0 ? "−" : "+") + hms(Math.abs(today)*60000);
+    big.className = "timer-big " + (today < 0 ? "pre" : "over");
+    fill.style.width = "100%"; fill.className = "over";
+  }else{
+    big.textContent = (left >= 0 ? "T−" : "T+") + hms(Math.abs(left));
+    big.className = "timer-big " + (onBreak ? "paused" : left < 0 ? "over" : now < start ? "pre" : "");
+    const pct = total > 0 ? ((now - start) / total) * 100 : 0;
+    fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    fill.className = left < 0 ? "over" : "";
+  }
 
-  const pct = total > 0 ? ((now - start) / total) * 100 : 0;
-  fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
-  fill.className = left < 0 ? "over" : "";
-
-  $("timerMeta").textContent = onBreak
-    ? `On break ${hms(liveBreakMs())}`
+  const bank = bankMin();
+  const homeTxt = bank
+    ? `Home ${clock(plainEnd())} · with overtime ${clock(end)}`
     : `Home ${clock(end)}`;
+  $("timerMeta").textContent = stopped ? "Done for today"
+    : onBreak ? `On break ${hms(liveBreakMs())} · ${homeTxt.toLowerCase()}`
+    : homeTxt;
   $("tBreakBtn").textContent = onBreak ? "End break" : "Break";
+  $("tStop").textContent = stopped ? "Resume" : "Stop work";
+  renderWeek();
 
   if(document.body.dataset.view === "timer"){
-    document.title = `${onBreak ? "☕ " : ""}${left >= 0 ? "T−" : "T+"}${hms(Math.abs(left)).slice(0,5)} · Taskify`;
+    document.title = stopped ? "Taskify"
+      : `${onBreak ? "☕ " : ""}${left >= 0 ? "T−" : "T+"}${hms(Math.abs(left)).slice(0,5)} · Taskify`;
   }
+}
+
+function renderWeekEditor(){
+  const names = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+  const monday = new Date(weekKey() + "T00:00:00");
+  const box = $("weekEditor");
+  box.innerHTML = names.map((n,i)=>{
+    const d = new Date(monday); d.setDate(monday.getDate()+i);
+    const k = dayKey(d), v = timer.log[k];
+    return `<div class="er">
+        <label for="wd-${i}">${n} <span class="count">${pad(d.getDate())}.${pad(d.getMonth()+1)}</span></label>
+        <input id="wd-${i}" type="number" step="5" placeholder="0" data-day="${k}" value="${v ?? ""}">
+        <span class="count">min</span>
+        <button class="icon" data-clear="${k}" title="Clear day">✕</button>
+      </div>`;
+  }).join("") + `<div class="actions"><button class="btn danger" id="weekClear">Clear week</button></div>`;
+
+  box.querySelectorAll("input[data-day]").forEach(inp=>inp.addEventListener("input", ()=>{
+    const k = inp.dataset.day, raw = inp.value.trim();
+    if(raw === "") delete timer.log[k]; else timer.log[k] = Math.round(parseFloat(raw) || 0);
+    saveLog(); tickTimer();
+  }));
+  box.querySelectorAll("[data-clear]").forEach(b=>b.onclick = ()=>{
+    delete timer.log[b.dataset.clear];
+    if(b.dataset.clear === dayKey(new Date())) timer.entry = 0;
+    saveLog(); renderWeekEditor(); tickTimer();
+  });
+  $("weekClear").onclick = ()=>{
+    timer.log = {}; timer.entry = 0; saveLog(); renderWeekEditor(); tickTimer(); toast("Week cleared.");
+  };
+}
+$("weekEdit").onclick = ()=>{
+  const box = $("weekEditor"), opening = box.hidden;
+  box.hidden = !opening;
+  $("weekEdit").textContent = opening ? "Close" : "Edit";
+  if(opening) renderWeekEditor();
+};
+
+function renderWeek(){
+  const names = ["Mo","Tu","We","Th","Fr","Sa","Su"];
+  const monday = new Date(weekKey() + "T00:00:00");
+  const todayK = dayKey(new Date());
+  $("weekStrip").innerHTML = names.map((n,i)=>{
+    const d = new Date(monday); d.setDate(monday.getDate()+i);
+    const k = dayKey(d), v = timer.log[k];
+    const cls = (k === todayK ? "today " : "") + (v == null ? "blank" : v < 0 ? "neg" : "pos");
+    return `<span class="${cls}">${n} ${v == null ? "·" : signed(v).replace(/h (\d+)m/, ":$1")}</span>`;
+  }).join("") + (bankMin() ? `<span class="total">${signed(bankMin())}</span>` : "");
 }
 function saveTimer(){
   timer.start = $("tStart").value || "08:00";
@@ -996,9 +1108,32 @@ $("tBreakBtn").onclick = ()=>{
   }
   tickTimer();
 };
+$("tStop").onclick = ()=>{
+  const k = dayKey(new Date());
+  if(timer.stopped){
+    timer.log[k] = (timer.log[k] || 0) - (timer.entry || 0);
+    if(!timer.log[k]) delete timer.log[k];
+    timer.stopped = ""; timer.entry = 0;
+    store.del("taskify.timer.stopped"); store.del("taskify.timer.entry"); saveLog();
+    toast("Back on the clock.");
+  }else{
+    if(timer.breakStart){ $("tBreakBtn").click(); }
+    timer.entry = Math.round(workedMs()/60000 - (timer.hours||0)*60);
+    timer.log[k] = (timer.log[k] || 0) + timer.entry;
+    timer.stopped = String(Date.now());
+    store.set("taskify.timer.stopped", timer.stopped);
+    store.set("taskify.timer.entry", String(timer.entry)); saveLog();
+    toast(`Day closed ${signed(timer.entry)}`);
+  }
+  if(!$("weekEditor").hidden) renderWeekEditor();
+  tickTimer();
+};
 $("tNow").onclick = ()=>{
   const now = new Date();
-  $("tStart").value = String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0");
+  $("tStart").value = pad(now.getHours()) + ":" + pad(now.getMinutes());
+  $("tBreak").value = 0;
+  timer.breakStart = ""; store.del("taskify.timer.breakStart");
+  timer.stopped = ""; store.del("taskify.timer.stopped");
   saveTimer();
 };
 setInterval(tickTimer, 1000);
