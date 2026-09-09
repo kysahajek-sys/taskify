@@ -18,6 +18,8 @@ Nothing is built or bundled — it's one HTML file with no dependencies, so a pl
 3. On another machine, paste the same token and gist ID (a full gist URL works too) and click **Load from gist**.
 4. Tick **Save automatically after changes** to push edits every few seconds.
 
+When the app opens with a token and gist ID saved, it loads the gist first — auto-save stays disabled until that succeeds, so a fresh browser can never overwrite your board with the starter one. Edits are also flushed when the tab is hidden or closed.
+
 The dot on the sync button shows the state: grey not connected, amber unsaved changes, green saved, red an error worth reading in the dialog.
 
 ### About the token
@@ -27,3 +29,7 @@ The token stays in your browser's local storage and goes only to `api.github.com
 ## Local data
 
 Without gist sync the board lives in memory for the session only. **Export** writes a JSON file, **Import** reads one back, and the same format is what the gist stores, so the two are interchangeable.
+
+## Timer tab
+
+The **Timer** tab holds a shift countdown: set your start time, the hours you owe and any unpaid break, and it shows a T− clock to the moment you can go home, flipping to T+ once you're into overtime. While the tab is open the browser tab title mirrors the countdown. Settings are kept in the browser, not in the gist, so each machine has its own working hours.

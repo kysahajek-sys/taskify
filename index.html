@@ -872,7 +872,7 @@ const sync = {
   token: store.get("taskify.token") || "",
   gistId: store.get("taskify.gist") || "",
   auto: store.get("taskify.auto") === "1",
-  busy:false, error:"", savedAt:null
+  busy:false, error:"", savedAt:null, ready:false
 };
 let lastPushed = null;
 const serialize = ()=>JSON.stringify({columns:state.columns, projects:state.projects, tasks:state.tasks}, null, 2);
@@ -894,6 +894,7 @@ function syncUI(){
     : sync.busy ? "Talking to GitHub…"
     : !sync.token ? "Add a token to connect."
     : !sync.gistId ? "Add a gist ID, or create a new gist."
+    : !sync.ready ? "Load from gist first — auto-save stays off until then."
     : sync.savedAt ? (dirty() ? "Changes not saved yet. Last save " + sync.savedAt.toLocaleTimeString() + "."
                               : "Saved at " + sync.savedAt.toLocaleTimeString() + ".")
     : "Connected. Nothing saved yet.";
@@ -932,7 +933,7 @@ function pushGist(){
   return run(async ()=>{
     const body = serialize();
     await gh("/gists/" + sync.gistId, {method:"PATCH", body: JSON.stringify({files:{[GIST_FILE]:{content: body}}})});
-    lastPushed = body; sync.savedAt = new Date();
+    lastPushed = body; sync.savedAt = new Date(); sync.ready = true;
   }, "Board saved to gist.");
 }
 
@@ -948,7 +949,7 @@ function pullGist(){
     data.projects = data.projects || {};
     data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; });
     state = data; ensureProjects(); closePanel(); renderBoard();
-    lastPushed = serialize(); sync.savedAt = new Date();
+    lastPushed = serialize(); sync.savedAt = new Date(); sync.ready = true;
   }, "Board loaded from gist.");
 }
 
@@ -961,7 +962,7 @@ function createGist(){
     })});
     sync.gistId = gist.id; store.set("taskify.gist", gist.id);
     $("gh-gist").value = gist.id;
-    lastPushed = body; sync.savedAt = new Date();
+    lastPushed = body; sync.savedAt = new Date(); sync.ready = true;
   }, "Secret gist created and saved.");
 }
 
@@ -988,8 +989,31 @@ $("syncModal").addEventListener("click", e=>{ if(e.target === $("syncModal")) $(
 
 setInterval(()=>{
   syncUI();
-  if(sync.auto && connected() && !sync.busy && !sync.error && dirty()) pushGist();
-}, 5000);
+  if(sync.auto && sync.ready && connected() && !sync.busy && !sync.error && dirty()) pushGist();
+}, 3000);
+
+// last-moment save when the tab is hidden or closed
+function pushOnExit(){
+  if(!(sync.auto && sync.ready && connected() && !sync.busy && dirty())) return;
+  const body = serialize();
+  try{
+    fetch("https://api.github.com/gists/" + sync.gistId, {
+      method:"PATCH", keepalive:true,
+      headers:{
+        "Accept":"application/vnd.github+json",
+        "Authorization":"Bearer " + sync.token,
+        "Content-Type":"application/json"
+      },
+      body: JSON.stringify({files:{[GIST_FILE]:{content: body}}})
+    });
+    lastPushed = body;
+  }catch(e){}
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) pushOnExit(); });
+window.addEventListener("pagehide", pushOnExit);
+
+// on open, the gist is the source of truth — load it before anything is written back
+if(connected()) pullGist(); else sync.ready = true;
 
 document.addEventListener("keydown", e=>{
   if(e.key !== "Escape") return;
