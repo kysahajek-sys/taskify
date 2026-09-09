@@ -268,7 +268,10 @@
   .dialog p{margin:0;color:var(--muted);font-size:12px}
   .dialog a{color:var(--accent)}
   .dialog .row input[type=password],.dialog .row input[type=text]{font-family:var(--mono)}
-  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .proj-row{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+  .proj-row input[type=color]{width:30px;height:26px;padding:0;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer;flex:0 0 auto}
+  .proj-row input[type=text]{flex:1;width:auto;min-width:0;background:none;border:none;outline:none;padding:0}
   .check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
   .check input{width:15px;height:15px;accent-color:var(--ok);cursor:pointer}
   .status{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
@@ -301,6 +304,7 @@
   <div class="spacer"></div>
   <span class="count board-only" id="stats"></span>
   <button class="btn board-only" id="addCol">+ Column</button>
+  <button class="btn board-only" id="projBtn">Projects</button>
   <button class="btn" id="export">Export</button>
   <button class="btn" id="importBtn">Import</button>
   <button class="btn" id="syncBtn"><span class="dot" id="syncDot"></span><span id="syncLabel">Gist sync</span></button>
@@ -343,6 +347,19 @@
 </aside>
 
 <div class="toast" id="toast" role="status"></div>
+
+<div class="backdrop" id="projModal" role="dialog" aria-modal="true" aria-label="Projects">
+  <div class="dialog">
+    <h2>Projects</h2>
+    <p>Pick a colour per project. Tasks choose from this list.</p>
+    <div class="list" id="projList"></div>
+    <div class="actions">
+      <button class="btn" id="projAdd">+ Add project</button>
+      <div class="spacer"></div>
+      <button class="btn" id="projClose">Close</button>
+    </div>
+  </div>
+</div>
 
 <div class="backdrop" id="syncModal" role="dialog" aria-modal="true" aria-label="GitHub Gist sync">
   <div class="dialog">
@@ -410,12 +427,14 @@ function seed(){
 
 /* ---------- helpers ---------- */
 function projectColor(name){
-  if(!name) return "#6d778c";
-  if(!state.projects[name]){
-    const used = Object.keys(state.projects).length;
-    state.projects[name] = PALETTE[used % PALETTE.length];
-  }
-  return state.projects[name];
+  return (name && state.projects[name]) || "#6d778c";
+}
+function ensureProjects(){
+  state.tasks.forEach(t=>{
+    if(t.project && !state.projects[t.project]){
+      state.projects[t.project] = PALETTE[Object.keys(state.projects).length % PALETTE.length];
+    }
+  });
 }
 function dueInfo(iso){
   if(!iso) return null;
@@ -617,8 +636,10 @@ function renderPanel(){
       <select id="p-col">${state.columns.map(c=>`<option value="${c.id}" ${c.id===t.colId?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
     </div>
     <div class="row"><label for="p-proj">Project</label>
-      <input id="p-proj" list="projects" value="${esc(t.project)}" placeholder="e.g. Battery">
-      <datalist id="projects">${Object.keys(state.projects).map(p=>`<option value="${esc(p)}">`).join("")}</datalist>
+      <select id="p-proj">
+        <option value="">— none —</option>
+        ${Object.keys(state.projects).map(p=>`<option value="${esc(p)}" ${p===t.project?"selected":""}>${esc(p)}</option>`).join("")}
+      </select>
     </div>
     <div class="row"><label for="p-due">Deadline ${due&&due.note?`· <span class="due ${due.cls}" style="border:none;padding:0">${due.note}</span>`:""}</label>
       <input id="p-due" type="date" value="${esc(t.deadline)}">
@@ -661,7 +682,7 @@ function renderPanel(){
   grow(); title.addEventListener("input", ()=>{ t.title = title.value; grow(); renderBoard(); });
 
   body.querySelector("#p-col").onchange = e=>{ t.colId = e.target.value; renderBoard(); };
-  body.querySelector("#p-proj").addEventListener("input", e=>{ t.project = e.target.value.trim(); projectColor(t.project); renderBoard(); });
+  body.querySelector("#p-proj").addEventListener("change", e=>{ t.project = e.target.value; renderBoard(); });
   body.querySelector("#p-due").onchange = e=>{ t.deadline = e.target.value; renderPanel(); renderBoard(); };
   body.querySelector("#p-notes").addEventListener("input", e=>{ t.notes = e.target.value; });
 
@@ -729,9 +750,63 @@ function renderPanel(){
 }
 
 /* ---------- filter, import/export ---------- */
+/* ---------- projects ---------- */
+function renameProject(from, to){
+  state.projects = Object.fromEntries(
+    Object.entries(state.projects).map(([k,v]) => k === from ? [to, v] : [k, v])
+  );
+  state.tasks.forEach(t=>{ if(t.project === from) t.project = to; });
+}
+function renderProjects(){
+  const box = document.getElementById("projList");
+  const names = Object.keys(state.projects);
+  box.innerHTML = names.map(n=>`
+      <div class="proj-row" data-name="${esc(n)}">
+        <input type="color" value="${esc(state.projects[n])}" data-k="color" aria-label="Colour for ${esc(n)}">
+        <input type="text" value="${esc(n)}" data-k="name" aria-label="Project name">
+        <span class="count">${state.tasks.filter(t=>t.project===n).length}</span>
+        <button class="icon" data-act="rm" title="Delete project">✕</button>
+      </div>`).join("") || `<div class="empty">No projects yet.</div>`;
+
+  box.querySelectorAll(".proj-row").forEach(row=>{
+    const name = row.dataset.name;
+    row.querySelector('[data-k="color"]').addEventListener("input", e=>{
+      state.projects[name] = e.target.value; renderBoard();
+    });
+    row.querySelector('[data-k="name"]').addEventListener("change", e=>{
+      const to = e.target.value.trim();
+      if(!to || (to !== name && state.projects[to])){ e.target.value = name; return toast("Pick a different name."); }
+      if(to === name) return;
+      renameProject(name, to); renderProjects(); renderBoard(); if(openId) renderPanel();
+    });
+    row.querySelector('[data-act="rm"]').onclick = ()=>{
+      const used = state.tasks.filter(t=>t.project===name).length;
+      delete state.projects[name];
+      state.tasks.forEach(t=>{ if(t.project===name) t.project = ""; });
+      renderProjects(); renderBoard(); if(openId) renderPanel();
+      toast(used ? `Removed. ${used} task${used===1?"":"s"} left without a project.` : "Project removed.");
+    };
+  });
+}
+document.getElementById("projAdd").onclick = ()=>{
+  let n = "New project", i = 2;
+  while(state.projects[n]) n = `New project ${i++}`;
+  state.projects[n] = PALETTE[Object.keys(state.projects).length % PALETTE.length];
+  renderProjects(); renderBoard();
+  const rows = document.querySelectorAll('#projList .proj-row [data-k="name"]');
+  rows[rows.length-1]?.select();
+};
+document.getElementById("projBtn").onclick = ()=>{
+  document.getElementById("projModal").classList.add("open"); renderProjects();
+};
+document.getElementById("projClose").onclick = ()=>document.getElementById("projModal").classList.remove("open");
+document.getElementById("projModal").addEventListener("click", e=>{
+  if(e.target.id === "projModal") e.target.classList.remove("open");
+});
+
 function refreshFilter(){
   const sel = document.getElementById("filter"), cur = sel.value;
-  const names = [...new Set(state.tasks.map(t=>t.project).filter(Boolean))].sort();
+  const names = Object.keys(state.projects);
   sel.innerHTML = `<option value="">All projects</option>` + names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
   sel.value = names.includes(cur) ? cur : "";
 }
@@ -761,7 +836,7 @@ document.getElementById("importFile").onchange = e=>{
       if(!Array.isArray(data.columns) || !Array.isArray(data.tasks)) throw new Error("shape");
       data.projects = data.projects || {};
       data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; });
-      state = data; closePanel(); renderBoard(); toast(`Imported ${state.tasks.length} tasks.`);
+      state = data; ensureProjects(); closePanel(); renderBoard(); toast(`Imported ${state.tasks.length} tasks.`);
     }catch(err){ toast("That file isn't a board export. Pick a JSON exported from here."); }
     e.target.value = "";
   };
@@ -872,7 +947,7 @@ function pullGist(){
     if(!Array.isArray(data.columns) || !Array.isArray(data.tasks)) throw new Error("That gist doesn't hold a Taskify board.");
     data.projects = data.projects || {};
     data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; });
-    state = data; closePanel(); renderBoard();
+    state = data; ensureProjects(); closePanel(); renderBoard();
     lastPushed = serialize(); sync.savedAt = new Date();
   }, "Board loaded from gist.");
 }
@@ -918,7 +993,8 @@ setInterval(()=>{
 
 document.addEventListener("keydown", e=>{
   if(e.key !== "Escape") return;
-  if($("syncModal").classList.contains("open")) $("syncModal").classList.remove("open");
+  if($("projModal").classList.contains("open")) $("projModal").classList.remove("open");
+  else if($("syncModal").classList.contains("open")) $("syncModal").classList.remove("open");
   else if(openId) closePanel();
 });
 window.addEventListener("beforeunload", e=>{
