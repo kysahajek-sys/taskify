@@ -448,7 +448,7 @@ function seed(){
     {id:"c3", name:"Accepted",    color:PALETTE[0], archived:true},
   ];
   const task = (title, project, subs) => ({
-    id:uid(), colId:"c1", title, project, deadline:"", waiting:"", contact:"", asked:"", notes:"", links:[],
+    id:uid(), colId:"c1", title, project, deadline:"", notes:"", links:[], blocks:[],
     subtasks: subs.map(([text,done])=>({id:uid(), text, done}))
   });
   const TE = "Tanks Engineering";
@@ -487,7 +487,12 @@ function normalizeState(data){
   });
   (data.tasks || []).forEach(t=>{
     t.links = t.links || []; t.subtasks = t.subtasks || [];
-    t.waiting = t.waiting || ""; t.contact = t.contact || ""; t.asked = t.asked || "";
+    t.blocks = t.blocks || [];
+    if(t.waiting){                                    // migrate the old single-block fields
+      t.blocks.push({id: uid(), what: t.waiting, who: t.contact || "", asked: t.asked || ""});
+    }
+    delete t.waiting; delete t.contact; delete t.asked;
+    t.blocks.forEach(b=>{ b.id = b.id || uid(); b.who = b.who || ""; b.asked = b.asked || ""; });
     if(t.project && !data.projects[t.project]){
       data.projects[t.project] = {color: PALETTE[Object.keys(data.projects).length % PALETTE.length], chase: null};
     }
@@ -509,7 +514,8 @@ function visible(t){
   const f = document.getElementById("filter").value;
   if(f && t.project !== f) return false;
   if(!q) return true;
-  return (t.title+" "+(t.project||"")+" "+(t.waiting||"")+" "+(t.contact||"")+" "+(t.notes||"")+" "+t.subtasks.map(s=>s.text).join(" ")).toLowerCase().includes(q);
+  const blocks = (t.blocks||[]).map(b=>b.what+" "+b.who).join(" ");
+  return (t.title+" "+(t.project||"")+" "+blocks+" "+(t.notes||"")+" "+t.subtasks.map(s=>s.text).join(" ")).toLowerCase().includes(q);
 }
 function toast(msg, undo){
   const el = document.getElementById("toast");
@@ -603,7 +609,7 @@ function renderBoard(){
 
     board.appendChild(el);
   });
-  const blocked = state.tasks.filter(t=>t.waiting).length;
+  const blocked = state.tasks.reduce((n,t)=>n + (t.blocks?.length || 0), 0);
   document.getElementById("stats").textContent =
     `${state.tasks.length} tasks` + (blocked ? ` · ${blocked} waiting` : "");
   refreshFilter();
@@ -631,9 +637,9 @@ function daysSince(iso){                       // working days only — weekends
   }
   return n;
 }
-function bucketOf(t){
-  if(!t.asked) return "ask";
-  return daysSince(t.asked) >= chaseDaysFor(t) ? "chase" : "waiting";
+function bucketOf(b, t){
+  if(!b.asked) return "ask";
+  return daysSince(b.asked) >= chaseDaysFor(t) ? "chase" : "waiting";
 }
 const BUCKETS = [
   ["ask",     "To ask"],
@@ -655,8 +661,8 @@ function bindChaseDefault(){
 function renderWaiting(){
   const box = document.getElementById("waitList");
   const tab = document.querySelector('.tab[data-view="waiting"]');
-  const items = state.tasks.filter(t=>t.waiting);
-  const mine = items.filter(t=>bucketOf(t) !== "waiting").length;
+  const items = state.tasks.flatMap(t=>(t.blocks||[]).map(b=>({t, b})));
+  const mine = items.filter(({t,b})=>bucketOf(b,t) !== "waiting").length;
   if(tab) tab.textContent = mine ? `Waiting ${mine}` : "Waiting";
   if(!box) return;
   const bar = `<div class="chase-bar">Chase after
@@ -665,24 +671,24 @@ function renderWaiting(){
   if(!items.length){ box.innerHTML = bar + `<div class="empty">Nothing is blocked.</div>`; bindChaseDefault(); return; }
 
   const groups = {};
-  items.forEach(t=>{ const b = bucketOf(t); (groups[b] = groups[b] || []).push(t); });
-  Object.values(groups).forEach(list=>list.sort((a,b)=>
-    (a.asked ? daysSince(a.asked) : 999) - (b.asked ? daysSince(b.asked) : 999)));
+  items.forEach(it=>{ const k = bucketOf(it.b, it.t); (groups[k] = groups[k] || []).push(it); });
+  Object.values(groups).forEach(list=>list.sort((x,y)=>
+    (y.b.asked ? daysSince(y.b.asked) : -1) - (x.b.asked ? daysSince(x.b.asked) : -1)));
 
   box.innerHTML = bar + BUCKETS.filter(([k])=>groups[k]).map(([k,label])=>`
       <div class="wait-group ${k}">
         <div class="wait-head">${label} <span class="count">${groups[k].length}</span></div>
-        ${groups[k].map(t=>{
+        ${groups[k].map(({t,b})=>{
           const col = state.columns.find(c=>c.id===t.colId);
-          const age = t.asked ? daysSince(t.asked) : null;
-          return `<div class="wait-row" data-task="${t.id}">
+          const age = b.asked ? daysSince(b.asked) : null;
+          return `<div class="wait-row" data-task="${t.id}" data-block="${b.id}">
               <button class="wait-open" data-open>
-                <span class="wait-what">${esc(t.waiting)}</span>
+                <span class="wait-what">${esc(b.what)}</span>
                 <span class="wait-ref">${esc(t.title||"Untitled")}${col?` · ${esc(col.name)}`:""}</span>
               </button>
-              <input class="who-input" data-who list="contacts" value="${esc(t.contact||"")}" placeholder="who?" aria-label="Who to ask">
+              <input class="who-input" data-who list="contacts" value="${esc(b.who||"")}" placeholder="who?" aria-label="Who to ask">
               <button class="btn tiny ask ${k==="chase"?"late":""}" data-ask title="${
-                  age === null ? "Stamp today as the day you asked" : `Asked ${t.asked} — click to chase, stamps today`
+                  age === null ? "Stamp today as the day you asked" : `Asked ${b.asked} — click to chase, stamps today`
                 } · chase after ${chaseDaysFor(t)} working days">${age === null ? "Asked today" : age === 0 ? "today" : age + "d"}</button>
               <button class="icon" data-askdate title="Pick the day you asked">🗓</button>
               <button class="icon" data-resolve title="Resolved — clear this">✕</button>
@@ -691,33 +697,35 @@ function renderWaiting(){
       </div>`).join("");
 
   bindChaseDefault();
-  const contacts = [...new Set(state.tasks.map(t=>(t.contact||"").trim()).filter(Boolean))].sort();
+  const contacts = [...new Set(state.tasks.flatMap(t=>(t.blocks||[]).map(b=>(b.who||"").trim())).filter(Boolean))].sort();
   document.getElementById("contacts").innerHTML = contacts.map(c=>`<option value="${esc(c)}">`).join("");
 
   box.querySelectorAll(".wait-row").forEach(row=>{
     const t = state.tasks.find(x=>x.id===row.dataset.task);
+    const b = t?.blocks.find(x=>x.id===row.dataset.block);
+    if(!b) return;
     row.querySelector("[data-who]").addEventListener("change", e=>{
-      t.contact = e.target.value.trim(); renderWaiting(); renderBoard();
+      b.who = e.target.value.trim(); renderWaiting(); renderBoard();
     });
-    row.querySelector("[data-ask]")?.addEventListener("click", ()=>{
-      const was = t.asked;
-      t.asked = todayISO(); renderWaiting(); renderBoard();
+    row.querySelector("[data-ask]").addEventListener("click", ()=>{
+      const was = b.asked;
+      b.asked = todayISO(); renderWaiting(); renderBoard();
       toast(was ? "Chased today." : "Marked as asked today.",
-        ()=>{ t.asked = was; renderWaiting(); renderBoard(); });
+        ()=>{ b.asked = was; renderWaiting(); renderBoard(); });
     });
-    row.querySelector("[data-askdate]")?.addEventListener("click", ()=>{
+    row.querySelector("[data-askdate]").addEventListener("click", ()=>{
       const btn = row.querySelector("[data-ask]");
       if(!btn) return;
       const inp = document.createElement("input");
       inp.type = "date"; inp.className = "ask-date";
-      inp.value = t.asked || todayISO(); inp.max = todayISO();
+      inp.value = b.asked || todayISO(); inp.max = todayISO();
       btn.replaceWith(inp);
       inp.focus();
       inp.addEventListener("change", ()=>{
-        const was = t.asked;
-        t.asked = inp.value || "";
+        const was = b.asked;
+        b.asked = inp.value || "";
         renderWaiting(); renderBoard();
-        toast("Asked date set.", ()=>{ t.asked = was; renderWaiting(); renderBoard(); });
+        toast("Asked date set.", ()=>{ b.asked = was; renderWaiting(); renderBoard(); });
       });
       inp.addEventListener("blur", ()=>setTimeout(()=>{ if(document.body.contains(inp)) renderWaiting(); }, 150));
       inp.addEventListener("keydown", e=>{ if(e.key === "Escape") renderWaiting(); });
@@ -730,10 +738,10 @@ function renderWaiting(){
       document.querySelector(`.card[data-id="${t.id}"]`)?.scrollIntoView({block:"center"});
     };
     row.querySelector("[data-resolve]").onclick = ()=>{
-      const was = {waiting:t.waiting, asked:t.asked};
-      t.waiting = ""; t.asked = "";
+      const i = t.blocks.indexOf(b);
+      t.blocks.splice(i,1);
       renderBoard(); if(openId === t.id) renderPanel();
-      toast("Resolved.", ()=>{ Object.assign(t, was); renderBoard(); if(openId === t.id) renderPanel(); });
+      toast("Resolved.", ()=>{ t.blocks.splice(i,0,b); renderBoard(); if(openId === t.id) renderPanel(); });
     };
   });
 }
@@ -741,14 +749,14 @@ function renderWaiting(){
 function cardEl(t, fallback){
   const color = t.project ? projectColor(t.project) : fallback;
   const el = document.createElement("article");
-  el.className = "card" + (t.waiting ? " blocked" : "") + (t.id===openId ? " selected" : "");
+  el.className = "card" + (t.blocks?.length ? " blocked" : "") + (t.id===openId ? " selected" : "");
   el.draggable = true; el.dataset.id = t.id; el.tabIndex = 0;
   el.style.setProperty("--c", color);
   const due = dueInfo(t.deadline);
   const doneN = t.subtasks.filter(s=>s.done).length;
   el.innerHTML = `
     <div class="card-title">${esc(t.title||"Untitled")}</div>
-    ${t.waiting ? `<button class="blocked-chip" data-unblock title="Resolved — clear this">Waiting for ${esc(t.waiting)}${t.contact?` · ask ${esc(t.contact)}`:""}${t.asked?` · ${daysSince(t.asked)}d`:""} <span class="x">✕</span></button>` : ""}
+    ${(t.blocks||[]).map(b=>`<button class="blocked-chip" data-unblock="${b.id}" title="Resolved — clear this">Waiting for ${esc(b.what)}${b.who?` · ask ${esc(b.who)}`:""}${b.asked?` · ${daysSince(b.asked)}d`:""} <span class="x">✕</span></button>`).join("")}
     <div class="meta">
       ${t.project ? `<span class="tag" style="--p:${projectColor(t.project)}">${esc(t.project)}</span>`:""}
       ${due ? `<span class="due ${due.cls}">${due.label}${due.note?" · "+due.note:""}</span>`:""}
@@ -763,13 +771,14 @@ function cardEl(t, fallback){
             <span>${esc(s.text||"Untitled subtask")}</span>
           </label>`).join("")}
       </div>`:""}`;
-  el.querySelector("[data-unblock]")?.addEventListener("click", e=>{
+  el.querySelectorAll("[data-unblock]").forEach(chip=>chip.addEventListener("click", e=>{
     e.stopPropagation();
-    const was = {waiting:t.waiting, asked:t.asked};
-    t.waiting = ""; t.asked = "";
+    const i = t.blocks.findIndex(b=>b.id === chip.dataset.unblock);
+    if(i < 0) return;
+    const [was] = t.blocks.splice(i,1);
     renderBoard(); if(openId === t.id) renderPanel();
-    toast("Resolved.", ()=>{ Object.assign(t, was); renderBoard(); if(openId === t.id) renderPanel(); });
-  });
+    toast("Resolved.", ()=>{ t.blocks.splice(i,0,was); renderBoard(); if(openId === t.id) renderPanel(); });
+  }));
   el.querySelectorAll("[data-sub]").forEach(box=>{
     box.addEventListener("click", e=>e.stopPropagation());
     box.addEventListener("change", e=>{
@@ -814,7 +823,7 @@ function moveCol(id, dir){
 }
 
 function addTask(colId){
-  const t = {id:uid(), colId, title:"", project:"", deadline:"", waiting:"", contact:"", asked:"", notes:"", links:[], subtasks:[]};
+  const t = {id:uid(), colId, title:"", project:"", deadline:"", notes:"", links:[], subtasks:[], blocks:[]};
   state.tasks.push(t); openTask(t.id);
   setTimeout(()=>document.querySelector(".panel-title")?.focus(), 60);
 }
@@ -872,8 +881,17 @@ function renderPanel(){
         <input id="newSub" placeholder="Add a subtask"><button class="btn" id="addSub">Add</button>
       </div>
     </div>
-    <div class="row"><label for="p-wait">Waiting for <span class="count">— leave empty if nothing blocks it</span></label>
-      <input id="p-wait" value="${esc(t.waiting||"")}" placeholder="e.g. drawing review">
+    <div class="row"><label>Waiting for <span class="count">— what blocks this task${t.blocks.length?`, ${t.blocks.length} open`:""}</span></label>
+      <div class="list" id="p-blocks">
+        ${t.blocks.map(b=>`
+          <div class="sub" data-id="${b.id}">
+            <input type="text" value="${esc(b.what)}">
+            <button class="icon" data-act="rm-block">✕</button>
+          </div>`).join("") || `<div class="empty">Nothing blocking it.</div>`}
+      </div>
+      <div class="inline-add" style="margin-top:6px">
+        <input id="newBlock" placeholder="e.g. drawing review"><button class="btn" id="addBlock">Add</button>
+      </div>
     </div>
     <div class="row"><label for="p-notes">Notes</label>
       <textarea id="p-notes" placeholder="Anything worth remembering">${esc(t.notes)}</textarea>
@@ -886,7 +904,22 @@ function renderPanel(){
   body.querySelector("#p-col").onchange = e=>{ t.colId = e.target.value; renderBoard(); };
   body.querySelector("#p-proj").addEventListener("change", e=>{ t.project = e.target.value; renderBoard(); });
   body.querySelector("#p-due").onchange = e=>{ t.deadline = e.target.value; renderPanel(); renderBoard(); };
-  body.querySelector("#p-wait").addEventListener("input", e=>{ t.waiting = e.target.value; renderBoard(); });
+  body.querySelectorAll("#p-blocks .sub").forEach(row=>{
+    const b = t.blocks.find(x=>x.id===row.dataset.id);
+    row.querySelector('input[type=text]').addEventListener("input", e=>{ b.what = e.target.value; renderBoard(); });
+    row.querySelector('[data-act="rm-block"]').onclick = ()=>{
+      t.blocks = t.blocks.filter(x=>x.id!==b.id); renderPanel(); renderBoard();
+    };
+  });
+  const addBlock = ()=>{
+    const inp = body.querySelector("#newBlock"), what = inp.value.trim();
+    if(!what) return;
+    t.blocks.push({id:uid(), what, who:"", asked:""});
+    renderPanel(); renderBoard();
+    body.querySelector("#newBlock").focus();
+  };
+  body.querySelector("#addBlock").onclick = addBlock;
+  body.querySelector("#newBlock").onkeydown = e=>{ if(e.key === "Enter") addBlock(); };
   body.querySelector("#p-notes").addEventListener("input", e=>{ t.notes = e.target.value; });
 
   body.querySelectorAll("#p-links .link-row").forEach(row=>{
