@@ -125,6 +125,30 @@
   .week-editor .er input{width:82px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:5px 7px;outline:none;text-align:right}
   .week-editor .er input:focus{border-color:var(--hover-line)}
   .timer-form{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:4px}
+  .wait-card{width:560px}
+  .wait-list{display:flex;flex-direction:column;gap:16px}
+  .wait-group{display:flex;flex-direction:column;gap:6px}
+  .wait-head{font-size:13px;font-weight:600;color:var(--warn);display:flex;gap:8px;align-items:center}
+  .wait-row{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+  .wait-open{flex:1;text-align:left;min-width:0;overflow-wrap:anywhere}
+  .wait-open{display:flex;flex-direction:column;gap:2px}
+  .wait-open:hover .wait-what{color:var(--accent)}
+  .wait-what{font-weight:600}
+  .wait-ref{font-size:11.5px;color:var(--muted)}
+  .wait-head a{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
+  .who-input{width:110px;flex:0 0 auto;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:3px 9px;font-size:11px;outline:none}
+  .who-input:focus{border-color:var(--warn)}
+  .wait-row .btn.tiny{flex:0 0 auto;border-radius:20px}
+  .ask-date{flex:0 0 auto;background:var(--surface);border:1px solid var(--hover-line);border-radius:20px;padding:2px 8px;font-size:11px;outline:none}
+  .chase-bar{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+  .chase-bar input{width:52px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:3px 7px;text-align:right;outline:none;color:var(--text)}
+  .chase-in{width:52px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 7px;text-align:right;outline:none;flex:0 0 auto}
+  .chase-in:focus{border-color:var(--hover-line)}
+  .wait-row .ask.late{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
+  .wait-group.chase .wait-head{color:var(--danger)}
+  .wait-group.waiting .wait-head{color:var(--muted)}
+  .who{font-size:11px;padding:2px 7px;border-radius:20px;border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);color:var(--warn);text-decoration:none;white-space:nowrap}
+  a.who:hover{background:color-mix(in srgb,var(--warn) 18%,transparent)}
   @media (max-width:520px){.timer-form{grid-template-columns:1fr}}
 
   /* ---------- board ---------- */
@@ -180,8 +204,12 @@
   .blocked-chip{
     display:inline-block;margin-bottom:7px;font-size:11px;padding:2px 8px;border-radius:5px;
     color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent);
-    border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);overflow-wrap:anywhere;
+    border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);
+    overflow-wrap:anywhere;text-align:left;cursor:pointer;
   }
+  .blocked-chip:hover{background:color-mix(in srgb,var(--warn) 26%,transparent)}
+  .blocked-chip .x{opacity:.6;padding-left:2px}
+  .blocked-chip:hover .x{opacity:1}
   .card-title{font-size:15.5px;font-weight:600;letter-spacing:-.01em;line-height:1.3;margin-bottom:7px;overflow-wrap:anywhere}
   .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .tag{
@@ -248,6 +276,8 @@
     opacity:0;transform:translateY(6px);transition:.15s;pointer-events:none;z-index:40;
   }
   .toast.show{opacity:1;transform:none}
+  .toast.has-action{pointer-events:auto}
+  .toast-undo{margin-left:12px;color:var(--accent);font-weight:600}
 
   /* ---------- gist sync ---------- */
   .dot{
@@ -303,6 +333,7 @@
   </div>
   <div class="tabs">
     <button class="tab active" data-view="board">Board</button>
+    <button class="tab" data-view="waiting">Waiting</button>
     <button class="tab" data-view="timer">Timer</button>
   </div>
   <div class="field board-only">🔍 <input id="search" type="search" placeholder="Search tasks" aria-label="Search tasks"></div>
@@ -319,6 +350,13 @@
 </header>
 
 <main class="board" id="board"></main>
+
+<main class="timer-view" id="waitingView" hidden>
+  <section class="timer-card wait-card">
+    <div class="wait-list" id="waitList"></div>
+    <datalist id="contacts"></datalist>
+  </section>
+</main>
 
 <main class="timer-view" id="timerView" hidden>
   <section class="timer-card">
@@ -410,13 +448,14 @@ function seed(){
     {id:"c3", name:"Accepted",    color:PALETTE[0], archived:true},
   ];
   const task = (title, project, subs) => ({
-    id:uid(), colId:"c1", title, project, deadline:"", waiting:"", notes:"", links:[],
+    id:uid(), colId:"c1", title, project, deadline:"", waiting:"", contact:"", asked:"", notes:"", links:[],
     subtasks: subs.map(([text,done])=>({id:uid(), text, done}))
   });
   const TE = "Tanks Engineering";
   return {
     columns: cols,
-    projects: {"Tanks Engineering":PALETTE[1], "General":PALETTE[0]},
+    settings: {chaseDays: 3},
+    projects: {"Tanks Engineering":{color:PALETTE[1], chase:null}, "General":{color:PALETTE[0], chase:null}},
     tasks: [
       task('Tubes Manufacturing Handbook', "General", [["Upload",true],["Add photos",false]]),
       task('14.5" Hoop Drawing', TE, [["Discuss on reg. meating",false],["Update",false]]),
@@ -433,15 +472,29 @@ function seed(){
 
 /* ---------- helpers ---------- */
 function projectColor(name){
-  return (name && state.projects[name]) || "#6d778c";
+  return (name && state.projects[name]?.color) || "#6d778c";
 }
-function ensureProjects(){
-  state.tasks.forEach(t=>{
-    if(t.project && !state.projects[t.project]){
-      state.projects[t.project] = PALETTE[Object.keys(state.projects).length % PALETTE.length];
+function chaseDaysFor(t){
+  const own = state.projects[t.project]?.chase;
+  return own > 0 ? own : (state.settings?.chaseDays || 3);
+}
+function normalizeState(data){
+  data.settings = Object.assign({chaseDays: 3}, data.settings || {});
+  data.projects = data.projects || {};
+  Object.entries(data.projects).forEach(([k,v])=>{
+    if(typeof v === "string") data.projects[k] = {color: v, chase: null};
+    else data.projects[k] = {color: v.color || PALETTE[0], chase: v.chase ?? null};
+  });
+  (data.tasks || []).forEach(t=>{
+    t.links = t.links || []; t.subtasks = t.subtasks || [];
+    t.waiting = t.waiting || ""; t.contact = t.contact || ""; t.asked = t.asked || "";
+    if(t.project && !data.projects[t.project]){
+      data.projects[t.project] = {color: PALETTE[Object.keys(data.projects).length % PALETTE.length], chase: null};
     }
   });
+  return data;
 }
+function ensureProjects(){ normalizeState(state); }
 function dueInfo(iso){
   if(!iso) return null;
   const today = new Date(); today.setHours(0,0,0,0);
@@ -456,12 +509,21 @@ function visible(t){
   const f = document.getElementById("filter").value;
   if(f && t.project !== f) return false;
   if(!q) return true;
-  return (t.title+" "+(t.project||"")+" "+(t.waiting||"")+" "+(t.notes||"")+" "+t.subtasks.map(s=>s.text).join(" ")).toLowerCase().includes(q);
+  return (t.title+" "+(t.project||"")+" "+(t.waiting||"")+" "+(t.contact||"")+" "+(t.notes||"")+" "+t.subtasks.map(s=>s.text).join(" ")).toLowerCase().includes(q);
 }
-function toast(msg){
+function toast(msg, undo){
   const el = document.getElementById("toast");
-  el.textContent = msg; el.classList.add("show");
-  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove("show"),2200);
+  el.textContent = msg;
+  el.classList.toggle("has-action", Boolean(undo));
+  if(undo){
+    const b = document.createElement("button");
+    b.className = "toast-undo"; b.textContent = "Undo";
+    b.onclick = ()=>{ undo(); el.classList.remove("show"); };
+    el.appendChild(b);
+  }
+  el.classList.add("show");
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>el.classList.remove("show"), undo ? 6000 : 2200);
 }
 
 /* ---------- board ---------- */
@@ -552,6 +614,128 @@ function renderBoard(){
     if(b && scrollTops[c.dataset.id] != null) b.scrollTop = scrollTops[c.dataset.id];
   });
   if(refocus) board.querySelector(`[data-sub="${refocus}"]`)?.focus({preventScroll:true});
+  renderWaiting();
+}
+
+const todayISO = ()=>{ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+function daysSince(iso){                       // working days only — weekends don't count
+  const from = new Date(iso + "T00:00:00");
+  const today = new Date(); today.setHours(0,0,0,0);
+  if(isNaN(from) || from >= today) return 0;
+  let n = 0;
+  const cur = new Date(from);
+  while(cur < today){
+    cur.setDate(cur.getDate() + 1);
+    const wd = cur.getDay();
+    if(wd !== 0 && wd !== 6) n++;
+  }
+  return n;
+}
+function bucketOf(t){
+  if(!t.asked) return "ask";
+  return daysSince(t.asked) >= chaseDaysFor(t) ? "chase" : "waiting";
+}
+const BUCKETS = [
+  ["ask",     "To ask"],
+  ["chase",   "Chase · past the wait you allowed"],   // working days, weekends skipped
+  ["waiting", "Asked, waiting"]
+];
+
+function bindChaseDefault(){
+  const inp = document.getElementById("chaseDefault");
+  if(!inp) return;
+  inp.addEventListener("change", e=>{          // on blur/Enter, so typing isn't interrupted
+    const v = parseInt(e.target.value, 10);
+    state.settings = state.settings || {};
+    state.settings.chaseDays = v > 0 ? v : 3;
+    renderBoard();
+  });
+}
+
+function renderWaiting(){
+  const box = document.getElementById("waitList");
+  const tab = document.querySelector('.tab[data-view="waiting"]');
+  const items = state.tasks.filter(t=>t.waiting);
+  const mine = items.filter(t=>bucketOf(t) !== "waiting").length;
+  if(tab) tab.textContent = mine ? `Waiting ${mine}` : "Waiting";
+  if(!box) return;
+  const bar = `<div class="chase-bar">Chase after
+      <input id="chaseDefault" type="number" min="1" max="60" value="${state.settings?.chaseDays || 3}"> working days
+      <span class="count">default · per project in Projects</span></div>`;
+  if(!items.length){ box.innerHTML = bar + `<div class="empty">Nothing is blocked.</div>`; bindChaseDefault(); return; }
+
+  const groups = {};
+  items.forEach(t=>{ const b = bucketOf(t); (groups[b] = groups[b] || []).push(t); });
+  Object.values(groups).forEach(list=>list.sort((a,b)=>
+    (a.asked ? daysSince(a.asked) : 999) - (b.asked ? daysSince(b.asked) : 999)));
+
+  box.innerHTML = bar + BUCKETS.filter(([k])=>groups[k]).map(([k,label])=>`
+      <div class="wait-group ${k}">
+        <div class="wait-head">${label} <span class="count">${groups[k].length}</span></div>
+        ${groups[k].map(t=>{
+          const col = state.columns.find(c=>c.id===t.colId);
+          const age = t.asked ? daysSince(t.asked) : null;
+          return `<div class="wait-row" data-task="${t.id}">
+              <button class="wait-open" data-open>
+                <span class="wait-what">${esc(t.waiting)}</span>
+                <span class="wait-ref">${esc(t.title||"Untitled")}${col?` · ${esc(col.name)}`:""}</span>
+              </button>
+              <input class="who-input" data-who list="contacts" value="${esc(t.contact||"")}" placeholder="who?" aria-label="Who to ask">
+              <button class="btn tiny ask ${k==="chase"?"late":""}" data-ask title="${
+                  age === null ? "Stamp today as the day you asked" : `Asked ${t.asked} — click to chase, stamps today`
+                } · chase after ${chaseDaysFor(t)} working days">${age === null ? "Asked today" : age === 0 ? "today" : age + "d"}</button>
+              <button class="icon" data-askdate title="Pick the day you asked">🗓</button>
+              <button class="icon" data-resolve title="Resolved — clear this">✕</button>
+            </div>`;
+        }).join("")}
+      </div>`).join("");
+
+  bindChaseDefault();
+  const contacts = [...new Set(state.tasks.map(t=>(t.contact||"").trim()).filter(Boolean))].sort();
+  document.getElementById("contacts").innerHTML = contacts.map(c=>`<option value="${esc(c)}">`).join("");
+
+  box.querySelectorAll(".wait-row").forEach(row=>{
+    const t = state.tasks.find(x=>x.id===row.dataset.task);
+    row.querySelector("[data-who]").addEventListener("change", e=>{
+      t.contact = e.target.value.trim(); renderWaiting(); renderBoard();
+    });
+    row.querySelector("[data-ask]")?.addEventListener("click", ()=>{
+      const was = t.asked;
+      t.asked = todayISO(); renderWaiting(); renderBoard();
+      toast(was ? "Chased today." : "Marked as asked today.",
+        ()=>{ t.asked = was; renderWaiting(); renderBoard(); });
+    });
+    row.querySelector("[data-askdate]")?.addEventListener("click", ()=>{
+      const btn = row.querySelector("[data-ask]");
+      if(!btn) return;
+      const inp = document.createElement("input");
+      inp.type = "date"; inp.className = "ask-date";
+      inp.value = t.asked || todayISO(); inp.max = todayISO();
+      btn.replaceWith(inp);
+      inp.focus();
+      inp.addEventListener("change", ()=>{
+        const was = t.asked;
+        t.asked = inp.value || "";
+        renderWaiting(); renderBoard();
+        toast("Asked date set.", ()=>{ t.asked = was; renderWaiting(); renderBoard(); });
+      });
+      inp.addEventListener("blur", ()=>setTimeout(()=>{ if(document.body.contains(inp)) renderWaiting(); }, 150));
+      inp.addEventListener("keydown", e=>{ if(e.key === "Escape") renderWaiting(); });
+      try{ inp.showPicker?.(); }catch(e){ /* blocked in cross-origin frames — the field still works */ }
+    });
+    row.querySelector("[data-open]").onclick = ()=>{
+      const col = state.columns.find(c=>c.id===t.colId);
+      if(col?.archived) col.expanded = true;
+      setView("board"); openTask(t.id);
+      document.querySelector(`.card[data-id="${t.id}"]`)?.scrollIntoView({block:"center"});
+    };
+    row.querySelector("[data-resolve]").onclick = ()=>{
+      const was = {waiting:t.waiting, asked:t.asked};
+      t.waiting = ""; t.asked = "";
+      renderBoard(); if(openId === t.id) renderPanel();
+      toast("Resolved.", ()=>{ Object.assign(t, was); renderBoard(); if(openId === t.id) renderPanel(); });
+    };
+  });
 }
 
 function cardEl(t, fallback){
@@ -564,7 +748,7 @@ function cardEl(t, fallback){
   const doneN = t.subtasks.filter(s=>s.done).length;
   el.innerHTML = `
     <div class="card-title">${esc(t.title||"Untitled")}</div>
-    ${t.waiting ? `<div class="blocked-chip">Waiting for ${esc(t.waiting)}</div>` : ""}
+    ${t.waiting ? `<button class="blocked-chip" data-unblock title="Resolved — clear this">Waiting for ${esc(t.waiting)}${t.contact?` · ask ${esc(t.contact)}`:""}${t.asked?` · ${daysSince(t.asked)}d`:""} <span class="x">✕</span></button>` : ""}
     <div class="meta">
       ${t.project ? `<span class="tag" style="--p:${projectColor(t.project)}">${esc(t.project)}</span>`:""}
       ${due ? `<span class="due ${due.cls}">${due.label}${due.note?" · "+due.note:""}</span>`:""}
@@ -579,6 +763,13 @@ function cardEl(t, fallback){
             <span>${esc(s.text||"Untitled subtask")}</span>
           </label>`).join("")}
       </div>`:""}`;
+  el.querySelector("[data-unblock]")?.addEventListener("click", e=>{
+    e.stopPropagation();
+    const was = {waiting:t.waiting, asked:t.asked};
+    t.waiting = ""; t.asked = "";
+    renderBoard(); if(openId === t.id) renderPanel();
+    toast("Resolved.", ()=>{ Object.assign(t, was); renderBoard(); if(openId === t.id) renderPanel(); });
+  });
   el.querySelectorAll("[data-sub]").forEach(box=>{
     box.addEventListener("click", e=>e.stopPropagation());
     box.addEventListener("change", e=>{
@@ -623,7 +814,7 @@ function moveCol(id, dir){
 }
 
 function addTask(colId){
-  const t = {id:uid(), colId, title:"", project:"", deadline:"", waiting:"", notes:"", links:[], subtasks:[]};
+  const t = {id:uid(), colId, title:"", project:"", deadline:"", waiting:"", contact:"", asked:"", notes:"", links:[], subtasks:[]};
   state.tasks.push(t); openTask(t.id);
   setTimeout(()=>document.querySelector(".panel-title")?.focus(), 60);
 }
@@ -682,7 +873,7 @@ function renderPanel(){
       </div>
     </div>
     <div class="row"><label for="p-wait">Waiting for <span class="count">— leave empty if nothing blocks it</span></label>
-      <input id="p-wait" value="${esc(t.waiting||"")}" placeholder="e.g. drawing review from MLE">
+      <input id="p-wait" value="${esc(t.waiting||"")}" placeholder="e.g. drawing review">
     </div>
     <div class="row"><label for="p-notes">Notes</label>
       <textarea id="p-notes" placeholder="Anything worth remembering">${esc(t.notes)}</textarea>
@@ -774,16 +965,22 @@ function renderProjects(){
   const names = Object.keys(state.projects);
   box.innerHTML = names.map(n=>`
       <div class="proj-row" data-name="${esc(n)}">
-        <input type="color" value="${esc(state.projects[n])}" data-k="color" aria-label="Colour for ${esc(n)}">
+        <input type="color" value="${esc(state.projects[n].color)}" data-k="color" aria-label="Colour for ${esc(n)}">
         <input type="text" value="${esc(n)}" data-k="name" aria-label="Project name">
-        <span class="count">${state.tasks.filter(t=>t.project===n).length}</span>
+        <input class="chase-in" type="number" min="1" max="60" data-k="chase" value="${state.projects[n].chase ?? ""}" placeholder="${state.settings?.chaseDays || 3}" title="Chase after this many working days — blank uses the default" aria-label="Chase days for ${esc(n)}">
+        <span class="count">d</span>
         <button class="icon" data-act="rm" title="Delete project">✕</button>
       </div>`).join("") || `<div class="empty">No projects yet.</div>`;
 
   box.querySelectorAll(".proj-row").forEach(row=>{
     const name = row.dataset.name;
     row.querySelector('[data-k="color"]').addEventListener("input", e=>{
-      state.projects[name] = e.target.value; renderBoard();
+      state.projects[name].color = e.target.value; renderBoard();
+    });
+    row.querySelector('[data-k="chase"]').addEventListener("input", e=>{
+      const v = parseInt(e.target.value, 10);
+      state.projects[name].chase = v > 0 ? v : null;
+      renderWaiting(); renderBoard();
     });
     row.querySelector('[data-k="name"]').addEventListener("change", e=>{
       const to = e.target.value.trim();
@@ -803,7 +1000,7 @@ function renderProjects(){
 document.getElementById("projAdd").onclick = ()=>{
   let n = "New project", i = 2;
   while(state.projects[n]) n = `New project ${i++}`;
-  state.projects[n] = PALETTE[Object.keys(state.projects).length % PALETTE.length];
+  state.projects[n] = {color: PALETTE[Object.keys(state.projects).length % PALETTE.length], chase: null};
   renderProjects(); renderBoard();
   const rows = document.querySelectorAll('#projList .proj-row [data-k="name"]');
   rows[rows.length-1]?.select();
@@ -846,9 +1043,7 @@ document.getElementById("importFile").onchange = e=>{
     try{
       const data = JSON.parse(reader.result);
       if(!Array.isArray(data.columns) || !Array.isArray(data.tasks)) throw new Error("shape");
-      data.projects = data.projects || {};
-      data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; t.waiting = t.waiting||""; });
-      state = data; ensureProjects(); closePanel(); renderBoard(); toast(`Imported ${state.tasks.length} tasks.`);
+      state = normalizeState(data); closePanel(); renderBoard(); toast(`Imported ${state.tasks.length} tasks.`);
     }catch(err){ toast("That file isn't a board export. Pick a JSON exported from here."); }
     e.target.value = "";
   };
@@ -887,7 +1082,7 @@ const sync = {
   busy:false, error:"", savedAt:null, ready:false
 };
 let lastPushed = null;
-const serialize = ()=>JSON.stringify({columns:state.columns, projects:state.projects, tasks:state.tasks}, null, 2);
+const serialize = ()=>JSON.stringify({columns:state.columns, settings:state.settings, projects:state.projects, tasks:state.tasks}, null, 2);
 const connected = ()=>Boolean(sync.token && sync.gistId);
 const dirty = ()=>serialize() !== lastPushed;
 
@@ -958,9 +1153,7 @@ function pullGist(){
     const text = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
     const data = JSON.parse(text);
     if(!Array.isArray(data.columns) || !Array.isArray(data.tasks)) throw new Error("That gist doesn't hold a Taskify board.");
-    data.projects = data.projects || {};
-    data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; t.waiting = t.waiting||""; });
-    state = data; ensureProjects(); closePanel(); renderBoard();
+    state = normalizeState(data); closePanel(); renderBoard();
     lastPushed = serialize(); sync.savedAt = new Date(); sync.ready = true;
   }, "Board loaded from gist.");
 }
@@ -1042,12 +1235,14 @@ syncUI();
 function setView(v){
   document.body.dataset.view = v;
   document.getElementById("board").hidden = v !== "board";
+  document.getElementById("waitingView").hidden = v !== "waiting";
   document.getElementById("timerView").hidden = v !== "timer";
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active", b.dataset.view === v));
   document.querySelectorAll(".board-only").forEach(el=>{ el.hidden = v !== "board"; });
   store.set("taskify.view", v);
   if(v !== "timer") document.title = "Taskify";
   if(v === "timer") tickTimer();
+  if(v === "waiting") renderWaiting();
 }
 document.querySelectorAll(".tab").forEach(b=>b.onclick = ()=>setView(b.dataset.view));
 
@@ -1249,7 +1444,7 @@ $("tNow").onclick = ()=>{
   saveTimer();
 };
 setInterval(tickTimer, 1000);
-setView(store.get("taskify.view") === "timer" ? "timer" : "board");
+setView(["timer","waiting"].includes(store.get("taskify.view")) ? store.get("taskify.view") : "board");
 
 renderBoard();
 </script>
