@@ -176,6 +176,12 @@
   .card:hover{border-color:color-mix(in srgb,var(--c) 55%,var(--line));border-left-color:var(--c)}
   .card.dragging{opacity:.45;cursor:grabbing}
   .card.selected{border-color:var(--accent);border-left-color:var(--accent)}
+  .card.blocked{border-left-style:dashed;border-left-width:4px}
+  .blocked-chip{
+    display:inline-block;margin-bottom:7px;font-size:11px;padding:2px 8px;border-radius:5px;
+    color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent);
+    border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);overflow-wrap:anywhere;
+  }
   .card-title{font-size:15.5px;font-weight:600;letter-spacing:-.01em;line-height:1.3;margin-bottom:7px;overflow-wrap:anywhere}
   .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .tag{
@@ -404,7 +410,7 @@ function seed(){
     {id:"c3", name:"Accepted",    color:PALETTE[0], archived:true},
   ];
   const task = (title, project, subs) => ({
-    id:uid(), colId:"c1", title, project, deadline:"", notes:"", links:[],
+    id:uid(), colId:"c1", title, project, deadline:"", waiting:"", notes:"", links:[],
     subtasks: subs.map(([text,done])=>({id:uid(), text, done}))
   });
   const TE = "Tanks Engineering";
@@ -450,7 +456,7 @@ function visible(t){
   const f = document.getElementById("filter").value;
   if(f && t.project !== f) return false;
   if(!q) return true;
-  return (t.title+" "+(t.project||"")+" "+(t.notes||"")+" "+t.subtasks.map(s=>s.text).join(" ")).toLowerCase().includes(q);
+  return (t.title+" "+(t.project||"")+" "+(t.waiting||"")+" "+(t.notes||"")+" "+t.subtasks.map(s=>s.text).join(" ")).toLowerCase().includes(q);
 }
 function toast(msg){
   const el = document.getElementById("toast");
@@ -535,8 +541,9 @@ function renderBoard(){
 
     board.appendChild(el);
   });
-  const done = state.tasks.filter(t=>t.subtasks.length && t.subtasks.every(s=>s.done)).length;
-  document.getElementById("stats").textContent = `${state.tasks.length} tasks · ${done} fully checked`;
+  const blocked = state.tasks.filter(t=>t.waiting).length;
+  document.getElementById("stats").textContent =
+    `${state.tasks.length} tasks` + (blocked ? ` · ${blocked} waiting` : "");
   refreshFilter();
 
   board.scrollLeft = scrollX;
@@ -550,13 +557,14 @@ function renderBoard(){
 function cardEl(t, fallback){
   const color = t.project ? projectColor(t.project) : fallback;
   const el = document.createElement("article");
-  el.className = "card" + (t.id===openId ? " selected" : "");
+  el.className = "card" + (t.waiting ? " blocked" : "") + (t.id===openId ? " selected" : "");
   el.draggable = true; el.dataset.id = t.id; el.tabIndex = 0;
   el.style.setProperty("--c", color);
   const due = dueInfo(t.deadline);
   const doneN = t.subtasks.filter(s=>s.done).length;
   el.innerHTML = `
     <div class="card-title">${esc(t.title||"Untitled")}</div>
+    ${t.waiting ? `<div class="blocked-chip">Waiting for ${esc(t.waiting)}</div>` : ""}
     <div class="meta">
       ${t.project ? `<span class="tag" style="--p:${projectColor(t.project)}">${esc(t.project)}</span>`:""}
       ${due ? `<span class="due ${due.cls}">${due.label}${due.note?" · "+due.note:""}</span>`:""}
@@ -615,7 +623,7 @@ function moveCol(id, dir){
 }
 
 function addTask(colId){
-  const t = {id:uid(), colId, title:"", project:"", deadline:"", notes:"", links:[], subtasks:[]};
+  const t = {id:uid(), colId, title:"", project:"", deadline:"", waiting:"", notes:"", links:[], subtasks:[]};
   state.tasks.push(t); openTask(t.id);
   setTimeout(()=>document.querySelector(".panel-title")?.focus(), 60);
 }
@@ -673,6 +681,9 @@ function renderPanel(){
         <input id="newSub" placeholder="Add a subtask"><button class="btn" id="addSub">Add</button>
       </div>
     </div>
+    <div class="row"><label for="p-wait">Waiting for <span class="count">— leave empty if nothing blocks it</span></label>
+      <input id="p-wait" value="${esc(t.waiting||"")}" placeholder="e.g. drawing review from MLE">
+    </div>
     <div class="row"><label for="p-notes">Notes</label>
       <textarea id="p-notes" placeholder="Anything worth remembering">${esc(t.notes)}</textarea>
     </div>`;
@@ -684,6 +695,7 @@ function renderPanel(){
   body.querySelector("#p-col").onchange = e=>{ t.colId = e.target.value; renderBoard(); };
   body.querySelector("#p-proj").addEventListener("change", e=>{ t.project = e.target.value; renderBoard(); });
   body.querySelector("#p-due").onchange = e=>{ t.deadline = e.target.value; renderPanel(); renderBoard(); };
+  body.querySelector("#p-wait").addEventListener("input", e=>{ t.waiting = e.target.value; renderBoard(); });
   body.querySelector("#p-notes").addEventListener("input", e=>{ t.notes = e.target.value; });
 
   body.querySelectorAll("#p-links .link-row").forEach(row=>{
@@ -835,7 +847,7 @@ document.getElementById("importFile").onchange = e=>{
       const data = JSON.parse(reader.result);
       if(!Array.isArray(data.columns) || !Array.isArray(data.tasks)) throw new Error("shape");
       data.projects = data.projects || {};
-      data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; });
+      data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; t.waiting = t.waiting||""; });
       state = data; ensureProjects(); closePanel(); renderBoard(); toast(`Imported ${state.tasks.length} tasks.`);
     }catch(err){ toast("That file isn't a board export. Pick a JSON exported from here."); }
     e.target.value = "";
@@ -947,7 +959,7 @@ function pullGist(){
     const data = JSON.parse(text);
     if(!Array.isArray(data.columns) || !Array.isArray(data.tasks)) throw new Error("That gist doesn't hold a Taskify board.");
     data.projects = data.projects || {};
-    data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; });
+    data.tasks.forEach(t=>{ t.links = t.links||[]; t.subtasks = t.subtasks||[]; t.waiting = t.waiting||""; });
     state = data; ensureProjects(); closePanel(); renderBoard();
     lastPushed = serialize(); sync.savedAt = new Date(); sync.ready = true;
   }, "Board loaded from gist.");
